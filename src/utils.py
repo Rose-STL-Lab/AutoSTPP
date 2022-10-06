@@ -1,0 +1,250 @@
+from datetime import datetime
+
+from tqdm.auto import tqdm
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
+import io
+import torch
+
+import logging
+import subprocess
+import re
+import time
+import sys
+
+import plotly.io as pio
+
+eps = 1e-10
+STEP = 1e-3
+t_start = 0.0
+t_end = 50.0
+x = np.arange(0.0, 1.0 + eps, STEP)
+x *= (t_end - t_start)
+logger = logging.getLogger(__name__)
+plt.set_loglevel('warning')
+pio.renderers.default = "png"
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+def imshow(fig):
+    """
+    Display a plotly PNG figure in PyCharm by converting it to a Matplotlib PNG figure
+    """
+    width = 800  # pixels
+    height = 600
+    margin = 0  # pixels
+    dpi = 300.  # dots per inch
+
+    img_bytes = fig.to_image(format="png", height=height, width=width, scale=10.0)
+    fp = io.BytesIO(img_bytes)
+    with fp:
+        i = mpimg.imread(fp, format='png')
+
+    fig_size = ((width + 2 * margin) / dpi, (height + 2 * margin) / dpi)  # inches
+    left = margin / dpi / fig_size[0]  # axes ratio
+    bottom = margin / dpi / fig_size[1]
+
+    fig = plt.figure(figsize=fig_size, dpi=dpi)
+    fig.subplots_adjust(left=left, bottom=bottom, right=1.-left, top=1.-bottom)
+
+    plt.imshow(i)
+    plt.show()
+
+
+def gen_fn(**kwargs):
+    """
+    Generate the file name used for save model / output \n
+    Using the main file name, time, and additional kwargs
+
+    :param kwargs: additional param e.g. lr=0.3 to contain in the file name
+    :return: str file name
+    """
+    file_name = sys.modules['__main__'].__file__.split("/")[len(__file__.split("/"))].split(".")[0]
+    time_str = datetime.now().strftime("%Y%m%d-%H%M%S")
+    res = file_name + '_' + time_str
+    for key, value in kwargs.items():
+        res += '_{0}={1}'.format(key, value)
+    return res
+
+
+def get_device(free = True, min_ram = 8000):
+    """
+    Get GPU device with maximum amount of free memory \n
+    Halt if no qualified GPU found
+
+    :param free: proceed only if there are unused GPU
+    :param min_ram: the minimum RAM (in MiB) required to proceed
+    :return: torch.device
+    """
+    command = 'nvidia-smi'
+    try:
+        p = subprocess.check_output(command)
+    except FileNotFoundError as err:
+        logger.exception(f'{command} utility not found.')
+        raise err
+
+    # Parse Nvidia interface for GPU info
+    p = str(p).split('\n')
+    ram_using = re.findall(r'\b\d+MiB+ */', str(p))
+    ram_total = re.findall(r'/ *\b\d+MiB', str(p))
+    ram_using = [int(''.join(filter(str.isdigit, ram))) for ram in ram_using]
+    ram_total = [int(''.join(filter(str.isdigit, ram))) for ram in ram_total]
+
+    try:
+        assert len(ram_using) == len(ram_total)
+    except AssertionError as err:
+        logger.exception(f'parse {command} failure.')
+        raise err
+
+    try:
+        assert len(ram_using) > 0
+    except AssertionError as err:
+        logger.exception('GPU not found.')
+        raise err
+
+    ram_free = [rt - ru for ru, rt in zip(ram_using, ram_total)]
+    idx = int(np.argmax(ram_free))
+
+    # No free GPU found, sleep until found
+    if (free and ram_using[idx] > 10) or ram_free[idx] < min_ram:
+        logger.info(f'free CUDA device not found, waiting...')
+        time.sleep(10)
+        return get_device(free, min_ram)
+
+    logger.debug(f'CUDA device {idx} name: {torch.cuda.get_device_name(idx)}')
+    logger.debug(f'RAM total: {ram_total[idx]} | using: {ram_using[idx]} | free: {ram_free[idx]}')
+    logger.debug(f'Number of CUDAs(cores): {torch.cuda.device_count()}')
+
+    return torch.device(f'cuda:{idx}')
+
+
+def adapt(arr, device):  # Adapt to device, add batch number and dim number = 1
+    return torch.tensor(arr).float().unsqueeze(0).unsqueeze(-1).to(device)
+
+
+def gt(lamb_func, his_t):
+    """
+    Compute ground truth intensity
+
+    :param lamb_func: 1D lambda function
+    :param his_t: np array [seq_len,]
+    """
+    y = np.array([lamb_func(t, his_t)[0] for t in x])
+    return y
+
+
+def loglike(his_t, y):
+    """
+    Estimate LL given his_t and intensity
+    """
+    F = sum(y) * STEP * (t_end - t_start)
+    lamb = y[np.array(his_t[his_t < t_end] / (t_end - t_start) / STEP, dtype=int)]
+    ll = sum(np.log(lamb)) - F
+    return ll
+
+
+def evaluate(lamb_func, predict, model, seqs):
+    """
+    Calculate λ MAPE and log likelihood w.r.t. a dataset
+    """
+    lls = []
+    mapes = []
+    for seq in tqdm(seqs):
+        his_t = seq.numpy()
+        y = gt(lamb_func, his_t)
+        y_predict = predict(model, his_t, x)
+
+        ll = loglike(his_t, y_predict)
+        mape = np.mean(abs((y_predict - y) / y))
+
+        lls.append(ll)
+        mapes.append(mape)
+
+    return sum(mapes) / len(mapes), sum(lls) / len(lls)
+
+
+def plot_predict_intensity(lamb_func, predict, model, his_t, color='blue'):
+    """
+    Plot λt vs. time
+    """
+    width, _ = plt.figaspect(.1)
+    _, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(width, width / 3),
+                                 gridspec_kw={'height_ratios': [5, 1]})
+
+    # Calculate and Plot the intensity
+    y = gt(lamb_func, his_t)
+    ax1.plot(x, y, color, label=f'λ(t)')
+    ax1.set_xlim([t_start, t_end])
+    ax1.legend()
+    ll = loglike(his_t, y)
+    print(f'ground truth: {ll}')
+
+    y_predict = predict(model, his_t, x)
+    ll = loglike(his_t, y_predict)
+    print(f'predict: {ll}')
+
+    # Calculate MAPE 
+    mape = np.mean(abs((y_predict - y) / y))
+    print(f'λ MAPE: {mape}')
+
+    ax1.plot(x, y_predict, 'red', label='predict')
+    ax1.set_xlim([t_start, t_end])
+    ax1.legend()
+
+    # Plot the events
+    idx = np.logical_and(his_t >= t_start, his_t < t_end)
+    x_ = np.zeros(np.sum(idx) + 2)
+    x_[1:-1] = his_t[idx]
+    x_[0] = t_start
+    x_[-1] = t_end
+    y_ = np.ones_like(x_)
+    y_[0] = 0
+    y_[-1] = 0
+
+    ax2.stem(x_, y_, use_line_collection=True, label=f'Events')
+    ax2.set_xlim([t_start, t_end])
+    ax2.invert_yaxis()
+
+
+def nested_stack(tensors):
+    """
+    Stack a nested list of tensors by considering each level as a new dimension at dim0
+
+    :param tensors: a nested list of tensors
+    :return: the concatenated tensor
+    """
+    if type(tensors) == torch.Tensor:
+        return tensors
+    elif type(tensors) == float:
+        return torch.tensor(tensors)
+    else:
+        assert type(tensors) == list
+        return torch.stack([nested_stack(tl) for tl in tensors], 0)
+
+
+if __name__ == '__main__':
+    get_device()
