@@ -1,12 +1,13 @@
 import torch
 from torch import nn
+from loguru import logger
 
 from src.integration.autoint import Cuboid
 
 
 class AutoIntSTPPSameInfluence(nn.Module):
 
-    def __init__(self, hidden_size, t_end, device):
+    def __init__(self, hidden_size, device):
         """
         :param: hidden_size: the dimension of linear hidden layer
         :param: t_end: the time when observation terminates
@@ -14,7 +15,6 @@ class AutoIntSTPPSameInfluence(nn.Module):
         """
         super().__init__()
         self.hidden_size = hidden_size
-        self.t_end = t_end
         self.device = device
 
         # log background intensity
@@ -31,63 +31,66 @@ class AutoIntSTPPSameInfluence(nn.Module):
         """
         self.F.project()
 
-    def forward(self, seq_pads, seq_lens):
+    def forward(self, st_x, st_y):
         """
-        Calculate NLL for a batch of sequence
+        Calculate NLL for a batch of sliding windows
 
-        :param seq_pads: [batch, maxlen, 3], the padded event timings
-        :param seq_lens: [batch], the sequence length before padding
+        :param st_x: [batch, seq_len, 3], the event timings
+        :param st_y: [batch, 1, 3], the time to forecast
         :return: nll: scalar, the average negative log likelihood
         """
-        batch, maxlen, _ = seq_pads.shape
-        t_last = torch.gather(seq_pads, 1, torch.tensor(seq_lens).to(self.device).view(-1, 1, 1) - 1).squeeze()
 
-        # Perform outer subtraction
-        seq_pads_roll = torch.cat((torch.zeros(batch, 1, 1).to(self.device),
-                                   seq_pads.transpose(1, 2)[..., :-1]), -1)
-        diff_pads = seq_pads - seq_pads_roll
-        tril_idx = torch.tril_indices(maxlen - 1, maxlen - 1)
-        diff_pads = diff_pads[:, tril_idx[0] + 1, tril_idx[1] + 1].unsqueeze(-1)
+        # Calculate spatiotemporal distance to previous events
+        t_x_cum = torch.cumsum(st_x[..., -1], -1)  # [batch, seq_len]
+        t_diff = t_x_cum[:, -1:] - t_x_cum + st_y[..., -1:, -1]  # [batch, seq_len]
+
+        if not torch.all(t_diff >= 0):
+            idx = torch.argmin(t_diff)
+            logger.debug(t_diff[idx // t_diff.shape[1]])
+            raise ValueError('Negative time difference.')
+
+        s_x = st_x[..., :2]
+        s_y = st_y[..., :2]
+        s_diff = s_y - s_x   # [batch, seq_len, 2]
+        st_diff = torch.cat([s_diff, t_diff.unsqueeze(-1)], -1)
 
         ########## Calculate intensity ############
         # [batch, seq_len]
-        # intensity before every event
-        lambs = self.F.dforward(diff_pads, 0).squeeze(-1)
-        lambs = lambs.split(list(range(1, maxlen)), dim=-1)
-        lambs = torch.stack([lamb.sum(dim=-1) for lamb in lambs], -1)
-        lambs = torch.cat((torch.zeros(batch, 1).to(self.device), lambs), -1)  # first event zero influence
-        lambs += self.background  # add background intensity
+        batch, seq_len, _ = st_diff.shape
+        lambs = self.F.forward(st_diff.view(-1, 3)).view([batch, seq_len])
+        lambs_sum = torch.sum(lambs, -1) + torch.exp(self.background)  # sum up all events' influence
+
+        ########## Calculate temporal intensity ############
+        lamb_t = self.F.lamb_t(s_x.view(-1, 2), t_diff.view(-1)).view([batch, seq_len])
+        lamb_t = torch.sum(lamb_t, -1) + torch.exp(self.background)  # sum up all events' influence
 
         ######### Calculate integral intensity ##########
         # [batch, seq_len]
-        # cumulative influence of every event
-        diff_pads_with_last = []
-        for seq_pad, seq_len in zip(seq_pads, seq_lens):
-            if self.t_end is None:
-                t_end = seq_pad[seq_len - 1]
-            else:
-                t_end = self.t_end
-            temp = t_end - seq_pad[:seq_len]
-            temp = torch.cat((temp, torch.zeros(maxlen - seq_len, 1).to(self.device)))
-            diff_pads_with_last.append(temp)
-        diff_pads_with_last = torch.stack(diff_pads_with_last)
-        # print(diff_pads_with_last[0, ..., 0])
-
-        lamb_ints = self.F(diff_pads_with_last).squeeze(-1)
-        lamb_ints = lamb_ints - self.F(torch.zeros(1).to(self.device))  # remove F(0)
+        # cumulative intensity of every event
+        lamb_ints = self.F.int_lamb(s_x.view(-1, 2), (t_x_cum[:, -1:] - t_x_cum).view(-1),
+                                    t_diff.view(-1)).view([batch, seq_len])
 
         ######### Calculate loss ########
-        sum_log_lambs = []
-        for lamb, seq_len in zip(lambs, seq_lens):
-            sum_log_lambs.append(torch.log(lamb[:seq_len]).sum())
-
         lamb_ints = torch.sum(lamb_ints, -1)
-        if self.t_end is None:
-            background_int = t_last * self.background
-        else:
-            background_int = self.t_end * self.background
-        lamb_ints += background_int  # Add background integral
+        background_int = st_y[..., -1, -1] * torch.exp(self.background)
+        lamb_ints += background_int  # Add background intensities' integral
 
-        nll = - (sum(sum_log_lambs) - sum(lamb_ints)) / batch
+        tll = torch.log(lamb_t).mean() - lamb_ints.mean()
+        ll = torch.log(lambs_sum).mean() - lamb_ints.mean()
 
-        return nll
+        if not torch.all(lambs_sum > 0):
+            idx = torch.argmax(torch.isnan(torch.log(lambs_sum)).float())
+            logger.debug(idx)
+            logger.debug(t_diff[idx])
+            logger.debug(lambs[idx])
+            logger.debug(torch.sum(lambs[idx]))
+            logger.debug(torch.log(torch.sum(lambs[idx])))
+            logger.debug(lambs_sum)
+            logger.debug(torch.log(lambs_sum))
+            logger.debug('--------------------------------------------')
+            raise ValueError('Negative intensities.')
+
+        sll = ll - tll
+
+        return -ll, sll, tll
+

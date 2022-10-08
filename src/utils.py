@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Dict, Any
 
 from tqdm.auto import tqdm
+from loguru import logger
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,13 +11,15 @@ import matplotlib.image as mpimg
 import io
 import torch
 
-import logging
 import subprocess
 import re
 import time
 import sys
 
 import plotly.io as pio
+import yaml
+import inspect
+import os
 
 eps = 1e-10
 STEP = 1e-3
@@ -23,10 +27,8 @@ t_start = 0.0
 t_end = 50.0
 x = np.arange(0.0, 1.0 + eps, STEP)
 x *= (t_end - t_start)
-logger = logging.getLogger(__name__)
 plt.set_loglevel('warning')
 pio.renderers.default = "png"
-
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -201,15 +203,15 @@ def plot_predict_intensity(lamb_func, predict, model, his_t, color='blue'):
     ax1.set_xlim([t_start, t_end])
     ax1.legend()
     ll = loglike(his_t, y)
-    print(f'ground truth: {ll}')
+    logger.info(f'ground truth: {ll}')
 
     y_predict = predict(model, his_t, x)
     ll = loglike(his_t, y_predict)
-    print(f'predict: {ll}')
+    logger.info(f'predict: {ll}')
 
     # Calculate MAPE 
     mape = np.mean(abs((y_predict - y) / y))
-    print(f'λ MAPE: {mape}')
+    logger.info(f'λ MAPE: {mape}')
 
     ax1.plot(x, y_predict, 'red', label='predict')
     ax1.set_xlim([t_start, t_end])
@@ -246,5 +248,40 @@ def nested_stack(tensors):
         return torch.stack([nested_stack(tl) for tl in tensors], 0)
 
 
+def eval_loss(model, test_loader):
+    model.eval()
+    sll_meter = AverageMeter()
+    tll_meter = AverageMeter()
+    loss_meter = AverageMeter()
+
+    for index, data in enumerate(test_loader):
+        st_x, st_y, _, _, _ = data
+        loss, sll, tll = model(st_x, st_y)
+
+        loss_meter.update(loss.item())
+        sll_meter.update(sll.mean().item())
+        tll_meter.update(tll.mean().item())
+
+    return loss_meter.avg, sll_meter.avg, tll_meter.avg
+
+
+def load_config(fn: str = '') -> Dict[str, Any]:
+    """
+    Load the config yaml file (in `configs` folder) for the corresponding model.
+
+    :param fn: name of the config yaml file (without postfix) to load, default to the caller file name
+    :return: dictionary with config entries
+    """
+    if fn == '':  # No filename given
+        fn = inspect.stack()[1].filename  # Absolute path
+        fn = os.path.basename(fn).split('.')[0]
+    with open(f'configs/{fn}.yaml', "r") as stream:
+        try:
+            return yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            logger.error(exc)
+
+
 if __name__ == '__main__':
-    get_device()
+    from custom import *
+    logger.info(get_device(free=False, min_ram=0))
