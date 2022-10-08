@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Dict, Any
 
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm as tqdm_, trange as trange_
+from tqdm.contrib import tenumerate as tenumerate_
 from loguru import logger
 
 import numpy as np
@@ -20,6 +21,7 @@ import plotly.io as pio
 import yaml
 import inspect
 import os
+import dotenv
 
 eps = 1e-10
 STEP = 1e-3
@@ -29,6 +31,13 @@ x = np.arange(0.0, 1.0 + eps, STEP)
 x *= (t_end - t_start)
 plt.set_loglevel('warning')
 pio.renderers.default = "png"
+
+dotenv.load_dotenv(override=True)  # Loading environment variable
+
+tqdm = lambda *argv: tqdm_(*argv, position=0, leave=True, ncols=100)  # Override tqdm for PyCharm compatibility
+trange = lambda *argv: trange_(*argv, position=0, leave=True, ncols=100)
+tenumerate = lambda *argv: tenumerate_(*argv, position=0, leave=True, ncols=100)
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -71,7 +80,7 @@ def imshow(fig):
     bottom = margin / dpi / fig_size[1]
 
     fig = plt.figure(figsize=fig_size, dpi=dpi)
-    fig.subplots_adjust(left=left, bottom=bottom, right=1.-left, top=1.-bottom)
+    fig.subplots_adjust(left=left, bottom=bottom, right=1. - left, top=1. - bottom)
 
     plt.imshow(i)
     plt.show()
@@ -93,7 +102,7 @@ def gen_fn(**kwargs):
     return res
 
 
-def get_device(free = True, min_ram = 8000):
+def get_device(free=True, min_ram=8000):
     """
     Get GPU device with maximum amount of free memory \n
     Halt if no qualified GPU found
@@ -283,5 +292,4 @@ def load_config(fn: str = '') -> Dict[str, Any]:
 
 
 if __name__ == '__main__':
-    from custom import *
     logger.info(get_device(free=False, min_ram=0))

@@ -1,8 +1,8 @@
 from torch import nn
 import torch
 from scipy.integrate import quad
-from tqdm.auto import tqdm, trange
-from tqdm.contrib import tenumerate
+import numpy as np
+from utils import get_device, AverageMeter, eval_loss, load_config, tqdm, tenumerate
 
 
 class Integral1DWrapper(torch.utils.data.Dataset):
@@ -144,14 +144,11 @@ class Namespace:
 
 if __name__ == '__main__':
     import os
-    from utils import get_device, AverageMeter, eval_loss, load_config
-    from integration.autoint import *
     from models.st_model import AutoIntSTPPSameInfluence
     from data.data import SlidingWindowWrapper
     from torch.utils.data import DataLoader
     from datetime import datetime
     from loguru import logger
-    from custom import *  # Custom init function
 
     dataset = 'covid_nj_cases'
     npz = np.load(f'data/spatiotemporal/{dataset}.npz', allow_pickle=True)
@@ -180,7 +177,7 @@ if __name__ == '__main__':
     parent_dir = f'models/AutoInt-STPP-Same-Influence-{dataset}-{time_now}'
     os.mkdir(parent_dir)
 
-    for epoch in trange(config['n_epoch']):
+    for epoch in range(config['n_epoch']):
         loss_total = 0
         model.train()
         for index, data in tenumerate(train_loader):
