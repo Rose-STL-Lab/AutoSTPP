@@ -141,10 +141,14 @@ def get_device(free=True, min_ram=8000):
     idx = int(np.argmax(ram_free))
 
     # No free GPU found, sleep until found
-    if (free and ram_using[idx] > 10) or ram_free[idx] < min_ram:
-        logger.info(f'free CUDA device not found, waiting...')
+    flag = True
+    while (free and ram_using[idx] > 10) or ram_free[idx] < min_ram:
+        if flag:
+            flag = False
+            logger.info(f'free CUDA device not found, waiting...')
         time.sleep(10)
-        return get_device(free, min_ram)
+    if not flag:
+        logger.info(f'free CUDA device found')
 
     logger.debug(f'CUDA device {idx} name: {torch.cuda.get_device_name(idx)}')
     logger.debug(f'RAM total: {ram_total[idx]} | using: {ram_using[idx]} | free: {ram_free[idx]}')
@@ -292,4 +296,4 @@ def load_config(fn: str = '') -> Dict[str, Any]:
 
 
 if __name__ == '__main__':
-    logger.info(get_device(free=False, min_ram=0))
+    logger.info(get_device(min_ram=0))
