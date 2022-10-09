@@ -1,38 +1,46 @@
 from itertools import combinations
+from typing import List, Generator
 
 import numpy as np
 import torch
-from src.experiment.autoint3d import MLPnD
+from torchtyping import TensorType, patch_typeguard
+from typeguard import typechecked
+
 from torch import nn, autograd
 from torch.nn import functional as F
-import logging
 
 from src.utils import nested_stack
 
-logger = logging.getLogger(__name__)
+patch_typeguard()
+batch = None  # Suppress PyCharm type warning
 
 
 class ReQU(nn.Module):
     def __init__(self):
         super().__init__()  # init the base class
 
-    def forward(self, x):
-        return torch.where(x > 0., 0.125 * x ** 2 + 0.5 * x + np.log(2.), torch.log(torch.exp(x) + 1.))
+    @staticmethod
+    def forward(x):
+        return torch.where(x > 0., 0.125 * x ** 2 + 0.5 * x + np.log(2.),
+                           torch.log(torch.exp(x) + torch.tensor(1.)))
 
 
-class ReQUflip(nn.Module):
+class ReQUFlip(nn.Module):
     def __init__(self):
         super().__init__()  # init the base class
 
-    def forward(self, x):
-        return torch.where(-x > 0., 0.125 * x ** 2 - 0.5 * x + np.log(2.), torch.log(torch.exp(-x) + 1.))
+    @staticmethod
+    def forward(x):
+        return torch.where(-x > 0., 0.125 * x ** 2 - 0.5 * x + np.log(2.),
+                           torch.log(torch.exp(-x) + torch.tensor(1.)))
 
 
 class MultSequential(nn.Sequential):
-
+    """
+    The optimized integral-net
+    """
     def __init__(self, *args):
         super().__init__(*args)
-        # self.x, self.f, self.df, self.d2f, self.d3f = None, [], {}, {}, {}
         self.x = None
         self.f = []
         self.dnf = {}
@@ -54,10 +62,10 @@ class MultSequential(nn.Sequential):
                                           - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)]
     }
 
-    acDict['ReQUflip'] = [lambda _, x: ac(_, -x) for ac in acDict['ReQU']]
+    acDict['ReQUFlip'] = [lambda _, x: ac(_, -x) for ac in acDict['ReQU']]  # ReQUFlip is ReQU flipped about y-axis
 
     @staticmethod
-    def hash(dims):
+    def hash(dims: List[int]) -> str:
         """
         Hash a list of deriving dimensions to str dict key
         :param dims: an unordered list of integers
@@ -66,7 +74,7 @@ class MultSequential(nn.Sequential):
         return str(sorted(dims))  # Hash the dimension
 
     @staticmethod
-    def partition(ns, m):
+    def partition(ns: List[int], m: int) -> Generator:
         """
         Finding all k-subset partitions
         Algorithm U, Knuth, the Art of Computer Programming
@@ -154,11 +162,10 @@ class MultSequential(nn.Sequential):
             a[n - m + j] = j - 1
         return f(m, n, 0, n, a)
 
-    def reset(self):
+    def reset(self) -> None:
         """
         Reinitialize all buffer, when x changes
         """
-        # self.f, self.df, self.d2f, self.d3f = [], {}, {}, {}
         del self.dnf
         self.f = []
         self.dnf = {}
@@ -184,141 +191,13 @@ class MultSequential(nn.Sequential):
 
         return self.f[-1]
 
-    # @DeprecationWarning
-    # def dforward(self, x, dim):
-    #     """
-    #     Start recursion for a partial derivative
-    #
-    #     :param x: (batch, dim)
-    #     :param dim: the deriving dimension
-    #     """
-    #     assert type(dim) == int
-    #     key = self.hash([dim])  # Hash the dimension
-    #
-    #     if x is self.x:
-    #         if key in self.df:
-    #             return self.df[key][-1]
-    #     else:
-    #         self.x = x
-    #         self.reset()
-    #
-    #     if len(self.f) == 0:
-    #         _ = self.forward(x)  # Prepare f values
-    #
-    #     base = torch.zeros_like(x)
-    #     base[..., dim] = 1
-    #     self.df[key] = pd = [base, ]
-    #
-    #     # Perform chain rule: df(g(x))/dx = f'(g(x)) g'(x)
-    #     for i, module in enumerate(self):
-    #         tp = type(module).__name__
-    #         if tp == 'Linear':
-    #             pd.append(pd[-1] @ module.weight.T)
-    #         elif tp == 'NonNegLinear':
-    #             pd.append(pd[-1] @ F.relu(module.weight).T)
-    #         elif tp == 'PadLinear':
-    #             pd.append(pd[-1] @ module.padded_weight().T)
-    #         elif tp in self.acDict:
-    #             pd.append(self.acDict[tp][0](self.f[i + 1], self.f[i]) * pd[-1])
-    #         else:
-    #             raise NotImplementedError
-    #
-    #     return pd[-1]
-    #
-    # @DeprecationWarning
-    # def d2forward(self, x, dims):
-    #     """
-    #     Start recursion for d2f / dxi dxj
-    #
-    #     :param x: (batch, dim)
-    #     :param dims: list [i, j], can be repetitive
-    #     """
-    #     assert type(dims) == list and len(dims) == 2
-    #     key = self.hash(dims)
-    #
-    #     if x is self.x:
-    #         if key in self.d2f:
-    #             return self.d2f[key][-1]
-    #     else:
-    #         self.x = x
-    #         self.reset()
-    #
-    #     for dim in dims:
-    #         if self.hash([dim]) not in self.df:
-    #             _ = self.dforward(x, dim)  # Prepare f, df values
-    #
-    #     self.d2f[key] = pd2 = [torch.zeros_like(x), ]
-    #
-    #     # ac''(f) * df/dx * df/dy + ac'(f) * d2f/dxdy
-    #     for i, module in enumerate(self):
-    #         tp = type(module).__name__
-    #         if tp == 'Linear':
-    #             pd2.append(pd2[-1] @ module.weight.T)
-    #         elif tp in self.acDict:
-    #             term1 = self.acDict[tp][1](self.f[i + 1], self.f[i])
-    #             for d in dims:
-    #                 term1 *= self.df[self.hash([d])][i]
-    #             term2 = self.acDict[tp][0](self.f[i + 1], self.f[i]) * pd2[-1]
-    #             pd2.append(term1 + term2)
-    #         else:
-    #             raise NotImplementedError
-    #
-    #     return pd2[-1]
-    #
-    # def d3forward(self, x, dims):
-    #     """
-    #     Start recursion for d3f / dxi dxj dxk
-    #
-    #     :param x: (batch, dim)
-    #     :param dims: list [i, j, k], can be repetitive
-    #     """
-    #     assert type(dims) == list and len(dims) == 3
-    #     key = self.hash(dims)
-    #
-    #     if x is self.x:
-    #         if key in self.d3f:
-    #             return self.d3f[key][-1]
-    #     else:
-    #         self.x = x
-    #         self.reset()
-    #
-    #     for dim in combinations(dims, 2):
-    #         if self.hash(dim) not in self.d2f:
-    #             _ = self.d2forward(x, list(dim))  # Prepare f, df, d2f values
-    #
-    #     self.d3f[key] = pd3 = [torch.zeros_like(x), ]
-    #
-    #     # ac''' *  df/dx * df/dy * df/dz
-    #     # ac''  * (d2f/dxdy * df/dz + d2f/dxdz * df/dy + d2f/dydz * df/dx)
-    #     # ac'   *  d3f/dxdydz
-    #     for i, module in enumerate(self):
-    #         tp = type(module).__name__
-    #         if tp == 'Linear':
-    #             pd3.append(pd3[-1] @ module.weight.T)
-    #         elif tp in self.acDict:
-    #             term1 = self.acDict[tp][2](self.f[i + 1], self.f[i])
-    #             for d in dims:
-    #                 term1 *= self.df[self.hash([d])][i]
-    #
-    #             d1, d2, d3 = dims
-    #             term2 = self.d2f[self.hash([d1, d2])][i] * self.df[self.hash([d3])][i]
-    #             term2 += self.d2f[self.hash([d1, d3])][i] * self.df[self.hash([d2])][i]
-    #             term2 += self.d2f[self.hash([d2, d3])][i] * self.df[self.hash([d1])][i]
-    #             term2 *= self.acDict[tp][1](self.f[i + 1], self.f[i])
-    #
-    #             term3 = self.acDict[tp][0](self.f[i + 1], self.f[i]) * pd3[-1]
-    #             pd3.append(term1 + term2 + term3)
-    #         else:
-    #             raise NotImplementedError
-    #
-    #     return pd3[-1]
-
     def dnforward(self, x, dims):
         """
         Start recursion for d(n)x / dx1 dx2 ... dxn
 
-        :param x: (batch, dim)
+        :param x: (..., dim)
         :param dims: unordered list [x1, x2, ..., xn], can be repetitive
+        :return: (..., dim), d(n)x / dx1 dx2 ... dxn
         """
         assert type(dims) == list
         key = self.hash(dims)
@@ -380,16 +259,19 @@ class MultSequential(nn.Sequential):
 
 
 class BaselineSequential(nn.Sequential):
-
+    """
+    The baseline integral-net implemented using PyTorch's built-in graph
+    """
     def __init__(self, *args):
         super().__init__(*args)
 
     def dnforward(self, x, dims):
         """
-        Start recursion for a nth order partial derivative
+        Start recursion for d(n)x / dx1 dx2 ... dxn
 
-        :param x: (batch, dim)
-        :param dims: the list of deriving dimension, with length n
+        :param x: (..., dim)
+        :param dims: unordered list [x1, x2, ..., xn], can be repetitive
+        :return: (..., dim), d(n)x / dx1 dx2 ... dxn
         """
         if x.is_leaf:
             x.requires_grad = True
@@ -404,11 +286,14 @@ class BaselineSequential(nn.Sequential):
 
 
 class MixSequential(nn.Module):
-
-    def __init__(self, *args, thres=3):
+    """
+    Combining the baseline and the optimized solution by
+    using the optimized solution as base cases (when number of dims < threshold)
+    """
+    def __init__(self, *args, threshold=3):
         super().__init__()
-        self.layers = MultSequential(*args)
-        self.thres = thres
+        self.layers = MultSequential(*args)  # Composition rather than inheritance
+        self.threshold = threshold
 
     def load_state_dict(self, state_dict, strict=True):
         return self.layers.load_state_dict(state_dict, strict)
@@ -418,16 +303,17 @@ class MixSequential(nn.Module):
 
     def dnforward(self, x, dims):
         """
-        Start recursion for a nth order partial derivative
+        Start recursion for d(n)x / dx1 dx2 ... dxn
 
-        :param x: (batch, dim)
-        :param dims: the list of deriving dimension, with length n
+        :param x: (..., dim)
+        :param dims: unordered list [x1, x2, ..., xn], can be repetitive
+        :return: (..., dim), d(n)x / dx1 dx2 ... dxn
         """
         if x.is_leaf:
             x.requires_grad = True
 
-        if len(dims) <= self.thres:
-            return self.layers.dnforward(x, dims[:self.thres])  # Base case
+        if len(dims) <= self.threshold:
+            return self.layers.dnforward(x, dims[:self.threshold])  # Base case
         else:
             df = self.dnforward(x, dims[:-1])  # Derivative with one fewer order
 
@@ -466,10 +352,43 @@ class Cuboid(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.L = MLPnD(MixSequential, 3, ReQUflip())
-        self.M = MLPnD(MixSequential, 3, ReQU())
+        self.L = MixSequential(nn.Linear(3, 128),
+                               ReQUFlip(),
+                               nn.Linear(128, 128),
+                               ReQUFlip(),
+                               nn.Linear(128, 128),
+                               ReQUFlip(),
+                               nn.Linear(128, 1)
+                               )
+        self.M = MixSequential(nn.Linear(3, 128),
+                               ReQU(),
+                               nn.Linear(128, 128),
+                               ReQU(),
+                               nn.Linear(128, 128),
+                               ReQU(),
+                               nn.Linear(128, 1)
+                               )
 
-    def cuboid(self, xa, xb, ya, yb, za, zb):
+    @typechecked
+    def cuboid(self,
+               xa: TensorType["batch"],
+               xb: TensorType["batch"],
+               ya: TensorType["batch"],
+               yb: TensorType["batch"],
+               za: TensorType["batch"],
+               zb: TensorType["batch"]) -> TensorType[24, 3, "batch"]:
+        """
+        Helper function for triple integrate the triple derivative.
+        All vertices (24 each) of cuboid integration areas are prepared for batch processing
+
+        :param xa: (batch_size,), lower x bound for integration
+        :param xb: (batch_size,), upper x bound for integration
+        :param ya: (batch_size,), lower y bound for integration
+        :param yb: (batch_size,), upper y bound for integration
+        :param za: (batch_size,), lower time bound for integration
+        :param zb: (batch_size,), upper time bound for integration
+        :return: (24, 3, batch_size), the integration endpoints
+        """
         return nested_stack([[xa, ya, zb],
                              [xa, yb, zb],
                              [xb, ya, zb],
@@ -495,7 +414,24 @@ class Cuboid(nn.Module):
                              [xa, yb, za],
                              [xa, yb, zb]]).to(next(self.parameters()).device)
 
-    def rectangle(self, xa, xb, ya, yb, z):
+    @typechecked
+    def rectangle(self,
+                  xa: TensorType["batch"],
+                  xb: TensorType["batch"],
+                  ya: TensorType["batch"],
+                  yb: TensorType["batch"],
+                  z:  TensorType["batch"]) -> TensorType[4, 3, "batch"]:
+        """
+        Helper function for double integrate the triple derivative at a certain time.
+        All endpoints (4 each) of rectangle integration areas are prepared for batch processing
+
+        :param xa: (batch_size,), lower x bound for integration
+        :param xb: (batch_size,), upper x bound for integration
+        :param ya: (batch_size,), lower y bound for integration
+        :param yb: (batch_size,), upper y bound for integration
+        :param z:  (batch_size,), the fixed z (time) as a constant during integration
+        :return: (4, 3, batch_size), the integration endpoints
+        """
         xa = xa * torch.ones_like(z)
         xb = xb * torch.ones_like(z)
         ya = ya * torch.ones_like(z)
@@ -506,29 +442,31 @@ class Cuboid(nn.Module):
                              [xb, ya, z],
                              [xb, yb, z]]).to(next(self.parameters()).device)
 
-    def forward(self, st):
+    @typechecked
+    def forward(self, st: TensorType["batch", 3]) -> TensorType["batch", 1]:
         """
         A closed evaluation of the third derivative (λ_st)
 
         :param st: (batch_size, 3), time is the last dimension
-        :return (batch_size) the third derivative
+        :return: (batch_size, 1), the third derivative
         """
-        assert len(st.shape) == 2 and st.shape[-1] == 3
-        return self.M.dnforward(st, [0, 1, 2]) * 3 - self.L.dnforward(st, [0, 1, 2]) * 3
+        return self.M.dnforward(st, [0, 1, 2]) * torch.tensor(3.) - \
+               self.L.dnforward(st, [0, 1, 2]) * torch.tensor(3.)
 
-    def lamb_t(self, s, t):
+    @typechecked
+    def lamb_t(self, s: TensorType["batch", 2],
+                     t: TensorType["batch", 1]) -> TensorType["batch", 1]:
         """
         A closed evaluation of the first derivative (λ_t) over the space [0,1]x[0,1], assuming the intensity
         is centered at s (origin)
 
         :param s: (batch_size, 2)
-        :param t: (batch_size), the time
-        :return: (batch_size) the first derivative
+        :param t: (batch_size, 1), the time
+        :return:  (batch_size, 1), the first derivative
         """
-        assert len(s.shape) == 2 and s.shape[1] == 2
-        assert len(t.shape) == 1 and t.shape[0] == s.shape[0]
         x = s[:, 0]
         y = s[:, 1]
+        t = t.squeeze(-1)  # all squeeze to (batch_size,)
         xa = -x
         xb = 1. - x
         ya = -y
@@ -538,20 +476,23 @@ class Cuboid(nn.Module):
         l = self.L.dnforward(self.rectangle(xa, xb, ya, yb, t).transpose(-1, -2), [2]) * 3
         return l[2] - l[0] + m[3] - m[2] + l[1] - l[3] + m[0] - m[1]
 
-    def int_lamb(self, s, ta, tb):
+    @typechecked
+    def int_lamb(self, s:  TensorType["batch", 2],
+                       ta: TensorType["batch", 1],
+                       tb: TensorType["batch", 1]) -> TensorType["batch", 1]:
         """
         A closed evaluation of the integral over the cuboid over the space [0,1]x[0,1] (related to s)
          and time [ta, tb]
 
         :param s:  (batch_size, 2), the origin locations
-        :param ta: (batch_size), the starting time
-        :param tb: (batch_size), the ending time
-        :return: (batch_size) the first derivative
+        :param ta: (batch_size, 1), starting time for integration
+        :param tb: (batch_size, 1), ending time for integration
+        :return:   (batch_size, 1), the first derivative
         """
-        assert len(ta.shape) == 1 and len(tb.shape) == 1 and len(tb) == len(ta)
-
         x = s[:, 0]
         y = s[:, 1]
+        ta = ta.squeeze(-1)
+        tb = tb.squeeze(-1)  # all squeeze to (batch_size,)
         xa = -x
         xb = 1. - x
         ya = -y
@@ -566,16 +507,16 @@ class Cuboid(nn.Module):
 
         return l[2] - l[0] + m[3] - m[2] + l[1] - l[3] + m[0] - m[1]
 
-    def project(self):
+    def project(self) -> None:
         """
-        Clamp all weights to non-negative
+        Clamp all layers' weights to non-negative.
         """
         with torch.no_grad():
-            self.M.layers.layers[0].weight.clamp_(0.0)
-            self.M.layers.layers[2].weight.clamp_(0.0)
-            self.M.layers.layers[4].weight.clamp_(0.0)
-            self.M.layers.layers[6].weight.clamp_(0.0)
-            self.L.layers.layers[0].weight.clamp_(min=None, max=0.0)
-            self.L.layers.layers[2].weight.clamp_(min=None, max=0.0)
-            self.L.layers.layers[4].weight.clamp_(min=None, max=0.0)
-            self.L.layers.layers[6].weight.clamp_(min=None, max=0.0)
+            self.M.layers[0].weight.clamp_(min=0.0, max=None)
+            self.M.layers[2].weight.clamp_(min=0.0, max=None)
+            self.M.layers[4].weight.clamp_(min=0.0, max=None)
+            self.M.layers[6].weight.clamp_(min=0.0, max=None)
+            self.L.layers[0].weight.clamp_(min=None, max=0.0)
+            self.L.layers[2].weight.clamp_(min=None, max=0.0)
+            self.L.layers[4].weight.clamp_(min=None, max=0.0)
+            self.L.layers[6].weight.clamp_(min=None, max=0.0)

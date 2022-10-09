@@ -61,14 +61,14 @@ class AutoIntSTPPSameInfluence(nn.Module):
         lambs_sum = torch.sum(lambs, -1) + torch.exp(self.background)  # sum up all events' influence
 
         ########## Calculate temporal intensity ############
-        lamb_t = self.F.lamb_t(s_x.view(-1, 2), t_diff.view(-1)).view([batch, seq_len])
+        lamb_t = self.F.lamb_t(s_x.view(-1, 2), t_diff.view(-1, 1)).view([batch, seq_len])
         lamb_t = torch.sum(lamb_t, -1) + torch.exp(self.background)  # sum up all events' influence
 
         ######### Calculate integral intensity ##########
         # [batch, seq_len]
         # cumulative intensity of every event
-        lamb_ints = self.F.int_lamb(s_x.view(-1, 2), (t_x_cum[:, -1:] - t_x_cum).view(-1),
-                                    t_diff.view(-1)).view([batch, seq_len])
+        lamb_ints = self.F.int_lamb(s_x.view(-1, 2), (t_x_cum[:, -1:] - t_x_cum).view(-1, 1),
+                                    t_diff.view(-1, 1)).view([batch, seq_len])
 
         ######### Calculate loss ########
         lamb_ints = torch.sum(lamb_ints, -1)

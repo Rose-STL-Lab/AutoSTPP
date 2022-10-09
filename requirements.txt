@@ -24,3 +24,6 @@ rich~=12.5.1
 loguru~=0.6.0
 
 PyYAML~=5.4.1
+
+torchtyping~=0.1.4
+typeguard~=2.13.3
