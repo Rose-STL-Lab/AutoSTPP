@@ -124,13 +124,28 @@ def log(model, dataloader):  # Run after their execution
     logger.info(params)
 
 
-@pytest.fixture(scope="class")
-def trained_model(model, dataloader, device):
+@pytest.fixture(
+    scope="class",
+    params=pytest.params['trained_model']
+)
+def trained_model(model, dataloader, device, request):
     import torch
     from torch import nn
     import numpy as np
     from loguru import logger
     from utils import relpath_under, serialize_config
+    import os
+
+    global params
+    model_fn = f'{relpath_under("models")}/{serialize_config(params)}.pkl'
+    if not request.param['retrain']:  # try to use the previous trained model
+        if os.path.exists(model_fn):
+            model.load_state_dict(torch.load(model_fn)['model_state_dict'])
+            logger.info('Previous model found and loaded.')
+            model.eval()
+            return model
+        else:
+            logger.info('Previous model not found. Retraining...')
 
     loss_func = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-3)
@@ -172,12 +187,11 @@ def trained_model(model, dataloader, device):
 
     model.eval()
 
-    global params
     torch.save({
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'scheduler_state_dict': scheduler.state_dict(),
-    }, f'{relpath_under("models")}/{serialize_config(params)}.pkl')
+    }, model_fn)
     return model
 
 

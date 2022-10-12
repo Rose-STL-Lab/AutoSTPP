@@ -4,3 +4,5 @@ model:
   act: ['tanh', 'sigmoid', 'sine']
   n_layers: [2, 3]
   hid_dim: [128]
+trained_model:
+  retrain: [false]
