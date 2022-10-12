@@ -130,6 +130,7 @@ def trained_model(model, dataloader, device):
     from torch import nn
     import numpy as np
     from loguru import logger
+    from utils import relpath_under, serialize_config
 
     loss_func = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-3)
@@ -170,6 +171,13 @@ def trained_model(model, dataloader, device):
         scheduler.step()
 
     model.eval()
+
+    global params
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+    }, f'{relpath_under("models")}/{serialize_config(params)}.pkl')
     return model
 
 

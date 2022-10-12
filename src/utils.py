@@ -300,7 +300,7 @@ def load_config(fn: str = '') -> Dict[str, Any]:
     """
     if fn == '':  # No filename given
         fn = inspect.stack()[1].filename  # Absolute path
-        fn = os.path.basename(fn).split('.')[0]
+    fn = os.path.basename(fn).split('.')[0]
     home_fn = project_root()
     with open(f'{home_fn}/configs/{fn}.yaml', "r") as stream:
         try:
