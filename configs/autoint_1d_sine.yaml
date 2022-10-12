@@ -1,0 +1,6 @@
+dataloader:
+  batch_size: [128, 64]
+model:
+  act: ['tanh', 'sigmoid', 'sine']
+  n_layers: [2, 3]
+  hid_dim: [128]

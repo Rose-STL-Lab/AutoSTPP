@@ -51,7 +51,8 @@ class MultSequential(nn.Sequential):
                  lambda f, _: 8 * f ** 2 - 6 * f ** 4 - 2,
                  lambda f, _: 24 * f ** 5 - 40 * f ** 3 + 16 * f],
         'Sigmoid': [lambda f, _: f * (1 - f),
-                    lambda f, _: (f - 2 * f ** 2) * (1 - f)],
+                    lambda f, _: 2 * f ** 3 - 3 * f ** 2 + f,
+                    lambda f, _: - 6 * f ** 4 + 12 * f ** 3 - 7 * f ** 2 + f],
         'Sine': [lambda _, x: torch.cos(x),
                  lambda f, _: -f,
                  lambda _, x: -torch.cos(x),
@@ -218,7 +219,7 @@ class MultSequential(nn.Sequential):
             self.dnf[key] = pd = [base, ]
         else:
             for dim in combinations(dims, N - 1):
-                if self.hash(dim) not in self.dnf:
+                if self.hash(list(dim)) not in self.dnf:
                     _ = self.dnforward(x, list(dim))  # Prepare derivatives of lower order
             self.dnf[key] = pd = [torch.zeros_like(x), ]
 

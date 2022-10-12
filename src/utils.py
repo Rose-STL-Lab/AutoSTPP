@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from tqdm.auto import tqdm as tqdm_, trange as trange_
 from tqdm.contrib import tenumerate as tenumerate_
@@ -22,6 +22,8 @@ import yaml
 import inspect
 import os
 import dotenv
+
+import itertools
 
 eps = 1e-10
 STEP = 1e-3
@@ -278,6 +280,17 @@ def eval_loss(model, test_loader):
     return loss_meter.avg, sll_meter.avg, tll_meter.avg
 
 
+def project_root() -> str:
+    """
+    Get the project root's absolute path, assuming this util file is under src/
+
+    :return: the project root's absolute path
+    """
+    home_fn = os.path.abspath(__file__) + "/../../"  # Project root
+    home_fn = os.path.abspath(home_fn)
+    return home_fn
+
+
 def load_config(fn: str = '') -> Dict[str, Any]:
     """
     Load the config yaml file (in `configs` folder) for the corresponding model.
@@ -288,11 +301,55 @@ def load_config(fn: str = '') -> Dict[str, Any]:
     if fn == '':  # No filename given
         fn = inspect.stack()[1].filename  # Absolute path
         fn = os.path.basename(fn).split('.')[0]
-    with open(f'configs/{fn}.yaml', "r") as stream:
+    home_fn = project_root()
+    with open(f'{home_fn}/configs/{fn}.yaml', "r") as stream:
         try:
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             logger.error(exc)
+
+
+def relpath_under(prefix: str) -> str:
+    """
+    Get the relative path of the caller to the project root, and
+    under a folder, create a sub-folder with the same relative path
+    for saving items (including intermediate directories)
+
+    :param prefix: the folder under which structure is created
+    :return: the relative path to the bottom-most folder
+    """
+    fn = inspect.stack()[1].filename  # Absolute path of the caller
+    fn = fn.split('.')[0]
+    home_fn = project_root()
+    relpath = os.path.relpath(fn, home_fn)
+    new_path = f'{home_fn}/{prefix}/{relpath}'
+    if not os.path.exists(new_path):
+        os.makedirs(new_path)
+    return new_path
+
+
+def dict_to_list(config: Dict[str, List]) -> List[Dict[str, Any]]:
+    """
+    Convert config dictionary to list of all possible options
+
+    :param config: a dictionary mapping config name -> list of config options
+    :return: a list of dictionary which each config entry maps to single value
+    """
+    for key in config:
+        config[key] = [{key: item} for item in config[key]]  # Append key to each item
+
+    product = list(itertools.product(*config.values()))
+    return [{k: v for d in tup for k, v in d.items()} for tup in product]
+
+
+def serialize_config(config: Dict) -> str:
+    """
+    Convert a json-like config to a file name
+    :param config: a double dictionary mapping
+        fixture name -> config name -> list of config options
+    :return: a short str of the config, with following special characters: {}[]_,=
+    """
+    return str(config).replace(':', '=').replace(' ', '').replace('\'', '')[1:-1]
 
 
 if __name__ == '__main__':

@@ -27,3 +27,5 @@ PyYAML~=5.4.1
 
 torchtyping~=0.1.4
 typeguard~=2.13.3
+
+pytest~=7.1.3
