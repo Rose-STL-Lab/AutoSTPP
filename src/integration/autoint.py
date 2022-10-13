@@ -296,9 +296,6 @@ class MixSequential(nn.Module):
         self.layers = MultSequential(*args)  # Composition rather than inheritance
         self.threshold = threshold
 
-    def load_state_dict(self, state_dict, strict=True):
-        return self.layers.load_state_dict(state_dict, strict)
-
     def forward(self, x):
         return self.layers.forward(x)
 
