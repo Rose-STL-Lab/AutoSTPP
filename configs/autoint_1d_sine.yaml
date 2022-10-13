@@ -1,8 +1,10 @@
 dataloader:
-  batch_size: [128, 64]
+  batch_size: [128]
 model:
   act: ['tanh', 'sigmoid', 'sine']
   n_layers: [2, 3]
-  hid_dim: [128]
+  hid_dim: [64, 128]
+  inp_dim: 1
+  out_dim: 1
 trained_model:
-  retrain: [false]
+  retrain: false

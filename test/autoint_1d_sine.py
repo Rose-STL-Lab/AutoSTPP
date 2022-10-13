@@ -1,8 +1,23 @@
 import pytest
 
+# noinspection PyUnresolvedReferences
+from autoint_mlp import model
+
 Xa = 0.
 Xb = 6.
+
 params = {}
+
+
+@pytest.fixture(scope="class", autouse=True)
+def log(model, dataloader):
+    from loguru import logger
+    import os
+
+    folder_name = pytest.relpath('figs')
+    if not os.path.exists(folder_name):
+        os.mkdir(folder_name)
+    logger.info(pytest.fn_params)
 
 
 @pytest.fixture(
@@ -15,9 +30,7 @@ def dataloader(device, request):
     from scipy.integrate import quad
     from torch.utils.data import DataLoader
 
-    batch_size = request.param['batch_size']
-    global params
-    params.update({'dataloader': request.param})
+    pytest.update_params('dataloader', request)
 
     class Integral1DWrapper(torch.utils.data.Dataset):
         """
@@ -43,85 +56,7 @@ def dataloader(device, request):
         return np.sin(X)
 
     dataset = Integral1DWrapper([Xa, Xb], func_to_fit, sampling_density=1024)
-    return DataLoader(dataset, shuffle=True, batch_size=batch_size)
-
-
-@pytest.fixture(
-    scope="class",
-    params=pytest.params['model']
-)
-def model(device, request):
-    import torch
-    from torch import nn
-    from integration.autoint import MixSequential
-
-    act = request.param['act']
-    n_layers = request.param['n_layers']
-    hid_dim = request.param['hid_dim']
-    global params
-    params.update({'model': request.param})
-
-    class Sine(nn.Module):
-        def __init__(self):
-            super().__init__()  # init the base class
-
-        @staticmethod
-        def forward(x):
-            return torch.sin(x)
-
-    act_dict = {
-        "tanh": nn.Tanh(),
-        "sigmoid": nn.Sigmoid(),
-        "sine": Sine()
-    }
-    act_layer = act_dict[act]
-
-    class MLP1D(nn.Module):
-        """
-        Multilayer Perceptron.
-        """
-
-        def __init__(self):
-            super().__init__()
-            assert n_layers >= 1
-            layers = [nn.Linear(1, hid_dim), ]
-            for _ in range(n_layers - 1):
-                layers.append(act_layer)
-                layers.append(nn.Linear(hid_dim, hid_dim))
-            layers.append(act_layer)
-            layers.append(nn.Linear(hid_dim, 1))
-            self.layers = MixSequential(*layers)
-
-        def forward(self, x):
-            """
-            f(x) forward pass
-            """
-            if x.shape[-1] != 1:
-                x = x.unsqueeze(-1)  # Add one dimension
-            return self.layers(x).squeeze()
-
-        def dnforward(self, x, dims):
-            """
-            fn(x) forward pass
-            """
-            if x.shape[-1] != 1:
-                x = x.unsqueeze(-1)  # Add one dimension
-            return self.layers.dnforward(x, dims).squeeze()
-
-    return MLP1D().to(device)
-
-
-@pytest.fixture(scope="class", autouse=True)
-def log(model, dataloader):  # Run after their execution
-    from loguru import logger
-    from utils import relpath_under, serialize_config
-    import os
-
-    global params
-    folder_name = f"{relpath_under('figs')}/{serialize_config(params)}"
-    if not os.path.exists(folder_name):
-        os.mkdir(folder_name)
-    logger.info(params)
+    return DataLoader(dataset, shuffle=True, batch_size=request.param['batch_size'])
 
 
 @pytest.fixture(
@@ -133,11 +68,9 @@ def trained_model(model, dataloader, device, request):
     from torch import nn
     import numpy as np
     from loguru import logger
-    from utils import relpath_under, serialize_config
     import os
 
-    global params
-    model_fn = f'{relpath_under("models")}/{serialize_config(params)}.pkl'
+    model_fn = pytest.relpath('models') + '.pkl'
     if not request.param['retrain']:  # try to use the previous trained model
         if os.path.exists(model_fn):
             model.load_state_dict(torch.load(model_fn)['model_state_dict'])
@@ -148,7 +81,7 @@ def trained_model(model, dataloader, device, request):
             logger.info('Previous model not found. Retraining...')
 
     loss_func = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=8e-3)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.5)
     epoch = 0
     loss = torch.tensor(1.0)
@@ -160,12 +93,17 @@ def trained_model(model, dataloader, device, request):
         for i, (x, integrants, targets) in enumerate(dataloader):
             optimizer.zero_grad()
 
-            d2f_anchor = torch.tensor([np.pi / 2.0, 3 * np.pi / 2.0]).to(device)  # mount f''(π/2) = 0, f''(3π/2) = 0
-            df_anchor = torch.tensor([0.0, np.pi]).to(device)  # mount f'(0) = 0, f'(π) = 0
-            f_anchor = torch.tensor([np.pi / 2.0, 3 * np.pi / 2.0]).to(device)  # mount f(π/2) = 0, f(3π/2) = 0
+            x = x.unsqueeze(-1)
 
-            # Learn seventh derivative
-            loss = loss_func(model.dnforward(x, [0, 0, 0]), integrants) + \
+            # Mount f''(π/2) = 0, f''(3π/2) = 0
+            d2f_anchor = torch.tensor([np.pi / 2.0, 3 * np.pi / 2.0]).unsqueeze(-1).to(device)
+            # Mount f'(0) = 0, f'(π) = 0
+            df_anchor = torch.tensor([0.0, np.pi]).unsqueeze(-1).to(device)
+            # Mount f(π/2) = 0, f(3π/2) = 0
+            f_anchor = torch.tensor([np.pi / 2.0, 3 * np.pi / 2.0]).unsqueeze(-1).to(device)
+
+            # Learn third derivative
+            loss = loss_func(model.dnforward(x, [0, 0, 0]).squeeze(), integrants) + \
                    torch.square(model.dnforward(d2f_anchor, [0, 0])).sum() + \
                    torch.square(model.dnforward(df_anchor, [0])).sum() + \
                    torch.square(model(f_anchor)).sum()
@@ -200,7 +138,6 @@ class TestClass:
     @staticmethod
     def plot(x, f_gt, f_pd, title, file_name):
         import plotly.graph_objects as go
-        from utils import relpath_under, serialize_config
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=x, y=f_gt, mode='markers', name='ground truth'))
@@ -212,9 +149,7 @@ class TestClass:
             yaxis_title="f",
         )
 
-        global params
-        folder_name = serialize_config(params)
-        fig.write_html(f"{relpath_under('figs')}/{folder_name}/{file_name}.html")
+        fig.write_html(f"{pytest.relpath('figs')}/{file_name}.html")
 
     def test_f(self, trained_model, device):
         import torch
@@ -224,7 +159,8 @@ class TestClass:
 
         x = np.arange(Xa, Xb, 0.01)
         f_gt = np.cos(x)
-        f_pd = trained_model(torch.Tensor(x).to(device)).cpu().detach().numpy()
+        f_pd = trained_model(torch.Tensor(x).to(device).unsqueeze(-1)) \
+            .squeeze(-1).cpu().detach().numpy()
 
         self.plot(x, f_gt, f_pd, r"$f(x) \text{ after fitting } f'''(x)$", "original_f")
 
@@ -239,7 +175,8 @@ class TestClass:
 
         x = np.arange(Xa, Xb, 0.01)
         f_gt = -np.sin(x)
-        f_pd = trained_model.dnforward(torch.Tensor(x).to(device), [0]).cpu().detach().numpy()
+        f_pd = trained_model.dnforward(torch.Tensor(x).to(device).unsqueeze(-1), [0]) \
+            .squeeze().cpu().detach().numpy()
 
         self.plot(x, f_gt, f_pd, r"$f'(x) \text{ after fitting } f'''(x)$", "1st_derivative")
 
@@ -254,7 +191,8 @@ class TestClass:
 
         x = np.arange(Xa, Xb, 0.01)
         f_gt = -np.cos(x)
-        f_pd = trained_model.dnforward(torch.Tensor(x).to(device), [0, 0]).cpu().detach().numpy()
+        f_pd = trained_model.dnforward(torch.Tensor(x).to(device).unsqueeze(-1), [0, 0]) \
+            .squeeze().cpu().detach().numpy()
 
         self.plot(x, f_gt, f_pd, r"$f''(x) \text{ after fitting } f'''(x)$", "2nd_derivative")
 

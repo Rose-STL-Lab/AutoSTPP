@@ -309,16 +309,18 @@ def load_config(fn: str = '') -> Dict[str, Any]:
             logger.error(exc)
 
 
-def relpath_under(prefix: str) -> str:
+def relpath_under(prefix: str, fn: str = None) -> str:
     """
     Get the relative path of the caller to the project root, and
     under a folder, create a sub-folder with the same relative path
     for saving items (including intermediate directories)
 
     :param prefix: the folder under which structure is created
+    :param fn: the caller file name, find automatically if not provided
     :return: the relative path to the bottom-most folder
     """
-    fn = inspect.stack()[1].filename  # Absolute path of the caller
+    if fn is None:
+        fn = inspect.stack()[1].filename  # Absolute path of the caller
     fn = fn.split('.')[0]
     home_fn = project_root()
     relpath = os.path.relpath(fn, home_fn)
