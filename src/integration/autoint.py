@@ -215,6 +215,7 @@ class MultSequential(nn.Sequential):
             if len(self.f) == 0:
                 _ = self.forward(x)  # Prepare f values
             base = torch.zeros_like(x)
+            assert dims[0] < x.shape[-1], "Deriving dimension exceeds output dimension"
             base[..., dims[0]] = 1
             self.dnf[key] = pd = [base, ]
         else:
@@ -251,6 +252,7 @@ class MultSequential(nn.Sequential):
                                 for dim in part:
                                     temp = temp * self.dnf[self.hash(list(dim))][i]
                                 term += temp
+                        assert order < len(self.acDict[tp]), "Activation high-order derivative not implemented"
                         term_sum += term * self.acDict[tp][order](self.f[i + 1], self.f[i])
                 pd.append(term_sum)
             else:
@@ -283,6 +285,7 @@ class BaselineSequential(nn.Sequential):
             df = lambda x_: self.dnforward(x_, dims[:-1])  # Derivative with one fewer order
 
         d2f = df(x)
+        assert dims[-1] < x.shape[-1], "Deriving dimension exceeds input dimension"
         return autograd.grad(d2f, x, torch.ones_like(d2f), create_graph=True)[0][:, dims[-1:]]
 
 
