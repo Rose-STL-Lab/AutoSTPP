@@ -6,17 +6,12 @@ from autoint_mlp import model
 Xa = 0.
 Xb = 6.
 
-params = {}
-
 
 @pytest.fixture(scope="class", autouse=True)
 def log(model, dataloader):
     from loguru import logger
-    import os
 
-    folder_name = pytest.relpath('figs')
-    if not os.path.exists(folder_name):
-        os.mkdir(folder_name)
+    pytest.relpath('figs')  # Create the figure directory
     logger.info(pytest.fn_params)
 
 
@@ -81,8 +76,8 @@ def trained_model(model, dataloader, device, request):
             logger.info('Previous model not found. Retraining...')
 
     loss_func = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=8e-3)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-3)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
     epoch = 0
     loss = torch.tensor(1.0)
 
@@ -143,13 +138,14 @@ class TestClass:
         fig.add_trace(go.Scatter(x=x, y=f_gt, mode='markers', name='ground truth'))
         fig.add_trace(go.Scatter(x=x, y=f_pd, mode='markers', name='approximation'))
 
+        mathjax_link = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js'
         fig.update_layout(
             title=title,
             xaxis_title="x",
             yaxis_title="f",
         )
 
-        fig.write_html(f"{pytest.relpath('figs')}/{file_name}.html")
+        fig.write_html(f"{pytest.relpath('figs')}/{file_name}.html", include_mathjax=mathjax_link)
 
     def test_f(self, trained_model, device):
         import torch
