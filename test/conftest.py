@@ -20,7 +20,7 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
     :return: a double dictionary mapping
         fixture name -> config name -> list of config options
     """
-    from utils import load_config, dict_to_list, project_root, relpath_under, serialize_config
+    from utils import load_config, dict_to_list, relpath_under, serialize_config
     from loguru import logger
     import sys
 
@@ -33,7 +33,7 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
 
     # Add a file logger
     fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
-    logger.add(f'{project_root()}/logs/{fn}.log', format=fmt, level="DEBUG")
+    logger.add(f'{relpath_under("logs", fn)}.log', format=fmt, level="DEBUG")
 
     configs: Dict[str, Dict[str, List]] = load_config(fn)
 
