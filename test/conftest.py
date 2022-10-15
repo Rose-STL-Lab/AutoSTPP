@@ -2,6 +2,7 @@ from typing import List, Dict
 
 import pytest
 from typeguard import typechecked
+from copy import deepcopy
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -36,9 +37,13 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
     logger.add(f'{relpath_under("logs", fn)}.log', format=fmt, level="DEBUG")
 
     configs: Dict[str, Dict[str, List]] = load_config(fn)
+    pytest.config = deepcopy(configs)
 
     pytest.fn_params = {}  # Parameters that need to be in the filename
-    for fixture_name in configs:
+    for fixture_name in pytest.config:
+        if type(configs[fixture_name]) is not dict:  # Non-fixture parameters
+            del configs[fixture_name]
+            continue
         for config_name in configs[fixture_name]:
             if type(configs[fixture_name][config_name]) is list:
                 if fixture_name not in pytest.fn_params:
@@ -64,5 +69,4 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
     setattr(pytest, 'relpath', relpath)
 
     pytest.params = {fixture_name: dict_to_list(configs[fixture_name]) for fixture_name in configs}
-    pytest.config = configs
     return configs
