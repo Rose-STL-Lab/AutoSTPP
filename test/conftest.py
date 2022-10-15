@@ -3,6 +3,9 @@ from typing import List, Dict
 import pytest
 from typeguard import typechecked
 from copy import deepcopy
+from utils import relpath_under, serialize_config
+import inspect
+import os
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -21,7 +24,7 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
     :return: a double dictionary mapping
         fixture name -> config name -> list of config options
     """
-    from utils import load_config, dict_to_list, relpath_under, serialize_config
+    from utils import load_config, dict_to_list
     from loguru import logger
     import sys
 
@@ -52,21 +55,35 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
             else:
                 configs[fixture_name][config_name] = [configs[fixture_name][config_name]]   # Make it a list
 
-    # Methods added to pytest module
-    def relpath(prefix: str):
-        import inspect
-        fn_ = inspect.stack()[1].filename
-        return f'{relpath_under(prefix, fn_)}/{serialize_config(pytest.fn_params)}'
-
-    def update_params(fixture_name_, request):
-        for key in request.param:
-            if key not in pytest.fn_params[fixture_name_]:
-                continue
-            else:
-                pytest.fn_params[fixture_name_][key] = request.param[key]
-
-    setattr(pytest, 'update_params', update_params)
-    setattr(pytest, 'relpath', relpath)
-
     pytest.params = {fixture_name: dict_to_list(configs[fixture_name]) for fixture_name in configs}
     return configs
+
+
+def update_params(fixture_name: str, request) -> None:
+    """
+    Update the (currently used) params to be in the file names using request.param
+
+    :param fixture_name: The fixture whose params to update
+    :param request: pytest param's request
+    """
+    for key in request.param:
+        if key not in pytest.fn_params[fixture_name]:
+            continue
+        else:
+            pytest.fn_params[fixture_name][key] = request.param[key]
+
+
+def relpath(prefix: str, create_dir: bool = False) -> str:
+    """
+    Get the relative path of the caller to the project root, and go down one level by
+    appending the config parameters at the end of path.
+
+    :param prefix: the folder under which structure is created
+    :param create_dir: whether to create a folder whose name is the parameters
+    :return: the relative path to the bottom-most folder
+    """
+    fn_ = inspect.stack()[1].filename
+    new_path = f'{relpath_under(prefix, fn_, True)}/{serialize_config(pytest.fn_params)}'
+    if create_dir and not os.path.exists(new_path):
+        os.makedirs(new_path)
+    return new_path

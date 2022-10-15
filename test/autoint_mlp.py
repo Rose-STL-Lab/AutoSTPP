@@ -1,4 +1,5 @@
 import pytest
+from conftest import update_params
 
 params = {}
 
@@ -12,7 +13,7 @@ def model(device, request):
     from torch import nn
     from integration.autoint import MixSequential
 
-    pytest.update_params("model", request)
+    update_params("model", request)
 
     class Sine(nn.Module):
         def __init__(self):

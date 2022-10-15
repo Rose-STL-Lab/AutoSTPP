@@ -309,7 +309,7 @@ def load_config(fn: str = '') -> Dict[str, Any]:
             logger.error(exc)
 
 
-def relpath_under(prefix: str, fn: str = None) -> str:
+def relpath_under(prefix: str, fn: str = None, create_dir: bool = False) -> str:
     """
     Get the relative path of the caller to the project root, and
     under a folder, create a sub-folder with the same relative path
@@ -317,6 +317,7 @@ def relpath_under(prefix: str, fn: str = None) -> str:
 
     :param prefix: the folder under which structure is created
     :param fn: the caller file name, find automatically if not provided
+    :param create_dir: whether to create a folder, default to false
     :return: the relative path to the bottom-most folder
     """
     if fn is None:
@@ -325,7 +326,7 @@ def relpath_under(prefix: str, fn: str = None) -> str:
     home_fn = project_root()
     relpath = os.path.relpath(fn, home_fn)
     new_path = f'{home_fn}/{prefix}/{relpath}'
-    if not os.path.exists(new_path):
+    if create_dir and not os.path.exists(new_path):
         os.makedirs(new_path)
     return new_path
 

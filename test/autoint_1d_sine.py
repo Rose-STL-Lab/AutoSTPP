@@ -2,6 +2,7 @@ import pytest
 
 # noinspection PyUnresolvedReferences
 from autoint_mlp import model
+from conftest import relpath, update_params
 
 Xa = 0.
 Xb = 6.
@@ -10,8 +11,6 @@ Xb = 6.
 @pytest.fixture(scope="class", autouse=True)
 def log(model, dataloader):
     from loguru import logger
-
-    pytest.relpath('figs')  # Create the figure directory
     logger.info(pytest.fn_params)
 
 
@@ -25,7 +24,7 @@ def dataloader(device, request):
     from scipy.integrate import quad
     from torch.utils.data import DataLoader
 
-    pytest.update_params('dataloader', request)
+    update_params('dataloader', request)
 
     class Integral1DWrapper(torch.utils.data.Dataset):
         """
@@ -65,7 +64,7 @@ def trained_model(model, dataloader, device, request):
     from loguru import logger
     import os
 
-    model_fn = pytest.relpath('models') + '.pkl'
+    model_fn = relpath('models') + '.pkl'
     if not request.param['retrain']:  # try to use the previous trained model
         if os.path.exists(model_fn):
             model.load_state_dict(torch.load(model_fn)['model_state_dict'])
@@ -145,7 +144,7 @@ class TestClass:
             yaxis_title="f",
         )
 
-        fig.write_html(f"{pytest.relpath('figs')}/{file_name}.html", include_mathjax=mathjax_link)
+        fig.write_html(f"{relpath('figs', True)}/{file_name}.html", include_mathjax=mathjax_link)
 
     def test_f(self, trained_model, device):
         import torch
