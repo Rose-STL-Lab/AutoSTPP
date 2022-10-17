@@ -294,6 +294,7 @@ class MixSequential(nn.Module):
     Combining the baseline and the optimized solution by
     using the optimized solution as base cases (when number of dims < threshold)
     """
+
     def __init__(self, *args, threshold=3):
         super().__init__()
         self.layers = MultSequential(*args)  # Composition rather than inheritance
@@ -351,24 +352,30 @@ class NonNegLinear(nn.Linear):
 
 class Cuboid(nn.Module):
 
-    def __init__(self):
+    def __init__(self, L=None, M=None):
         super().__init__()
-        self.L = MixSequential(nn.Linear(3, 128),
-                               ReQUFlip(),
-                               nn.Linear(128, 128),
-                               ReQUFlip(),
-                               nn.Linear(128, 128),
-                               ReQUFlip(),
-                               nn.Linear(128, 1)
-                               )
-        self.M = MixSequential(nn.Linear(3, 128),
-                               ReQU(),
-                               nn.Linear(128, 128),
-                               ReQU(),
-                               nn.Linear(128, 128),
-                               ReQU(),
-                               nn.Linear(128, 1)
-                               )
+        if L is not None:
+            self.L = L
+        else:
+            self.L = MixSequential(nn.Linear(3, 128),
+                                   ReQUFlip(),
+                                   nn.Linear(128, 128),
+                                   ReQUFlip(),
+                                   nn.Linear(128, 128),
+                                   ReQUFlip(),
+                                   nn.Linear(128, 1)
+                                   )
+        if M is not None:
+            self.L = L
+        else:
+            self.M = MixSequential(nn.Linear(3, 128),
+                                   ReQU(),
+                                   nn.Linear(128, 128),
+                                   ReQU(),
+                                   nn.Linear(128, 128),
+                                   ReQU(),
+                                   nn.Linear(128, 1)
+                                   )
 
     @typechecked
     def cuboid(self,
@@ -421,7 +428,7 @@ class Cuboid(nn.Module):
                   xb: TensorType["batch"],
                   ya: TensorType["batch"],
                   yb: TensorType["batch"],
-                  z:  TensorType["batch"]) -> TensorType[4, 3, "batch"]:
+                  z: TensorType["batch"]) -> TensorType[4, 3, "batch"]:
         """
         Helper function for double integrate the triple derivative at a certain time.
         All endpoints (4 each) of rectangle integration areas are prepared for batch processing
@@ -455,11 +462,12 @@ class Cuboid(nn.Module):
                self.L.dnforward(st, [0, 1, 2]) * torch.tensor(3.)
 
     @typechecked
-    def lamb_t(self, s: TensorType["batch", 2],
-                     t: TensorType["batch", 1]) -> TensorType["batch", 1]:
+    def lamb_t_stpp(self,
+                    s: TensorType["batch", 2],
+                    t: TensorType["batch", 1]) -> TensorType["batch", 1]:
         """
-        A closed evaluation of the first derivative (λ_t) over the space [0,1]x[0,1], assuming the intensity
-        is centered at s (origin)
+        Shorthand for the closed evaluation of the first derivative (λ_t)
+        over the space [0,1]x[0,1], assuming the intensity is centered at s (origin)
 
         :param s: (batch_size, 2)
         :param t: (batch_size, 1), the time
@@ -472,18 +480,38 @@ class Cuboid(nn.Module):
         xb = 1. - x
         ya = -y
         yb = 1. - y
+        return self.lamb_t(xa, xb, ya, yb, t)
 
+    @typechecked
+    def lamb_t(self,
+               xa: TensorType["batch"],
+               xb: TensorType["batch"],
+               ya: TensorType["batch"],
+               yb: TensorType["batch"],
+               t:  TensorType["batch"]) -> TensorType["batch", 1]:
+        """
+        A closed evaluation of the first derivative (λ_t) over the space [0,1]x[0,1], assuming the intensity
+        is centered at s (origin)
+
+        :param xa: (batch_size,), lower x bound
+        :param xb: (batch_size,), upper x bound
+        :param ya: (batch_size,), lower y bound
+        :param yb: (batch_size,), upper y bound
+        :param t:  (batch_size,), the time
+        :return:   (batch_size, 1), the first derivative
+        """
         m = self.M.dnforward(self.rectangle(xa, xb, ya, yb, t).transpose(-1, -2), [2]) * 3
         l = self.L.dnforward(self.rectangle(xa, xb, ya, yb, t).transpose(-1, -2), [2]) * 3
         return l[2] - l[0] + m[3] - m[2] + l[1] - l[3] + m[0] - m[1]
 
     @typechecked
-    def int_lamb(self, s:  TensorType["batch", 2],
-                       ta: TensorType["batch", 1],
-                       tb: TensorType["batch", 1]) -> TensorType["batch", 1]:
+    def int_lamb_stpp(self,
+                      s:  TensorType["batch", 2],
+                      ta: TensorType["batch", 1],
+                      tb: TensorType["batch", 1]) -> TensorType["batch", 1]:
         """
-        A closed evaluation of the integral over the cuboid over the space [0,1]x[0,1] (related to s)
-         and time [ta, tb]
+        Shorthand for the closed evaluation of the integral over the cuboid
+        over the space [0,1]×[0,1] (related to s) and time [ta, tb]
 
         :param s:  (batch_size, 2), the origin locations
         :param ta: (batch_size, 1), starting time for integration
@@ -492,13 +520,34 @@ class Cuboid(nn.Module):
         """
         x = s[:, 0]
         y = s[:, 1]
-        ta = ta.squeeze(-1)
-        tb = tb.squeeze(-1)  # all squeeze to (batch_size,)
         xa = -x
         xb = 1. - x
         ya = -y
         yb = 1. - y
+        ta = ta.squeeze(-1)
+        tb = tb.squeeze(-1)  # all squeeze to (batch_size,)
+        return self.int_lamb(xa, xb, ya, yb, ta, tb)
 
+    @typechecked
+    def int_lamb(self,
+                 xa: TensorType["batch"],
+                 xb: TensorType["batch"],
+                 ya: TensorType["batch"],
+                 yb: TensorType["batch"],
+                 ta: TensorType["batch"],
+                 tb: TensorType["batch"]) -> TensorType["batch", 1]:
+        """
+        A closed evaluation of the integral over the cuboid over the space [xa,xb]×[ya,yb]
+         and time [ta, tb]
+
+        :param xa: (batch_size,), lower x bound
+        :param xb: (batch_size,), upper x bound
+        :param ya: (batch_size,), lower y bound
+        :param yb: (batch_size,), upper y bound
+        :param ta: (batch_size,), starting time for integration
+        :param tb: (batch_size,), ending time for integration
+        :return:   (batch_size, 1), the first derivative
+        """
         endpoints = self.cuboid(xa, xb, ya, yb, ta, tb).view(3, 2, 4, 3, -1).transpose(-1, -2)
 
         m = self.M(endpoints).sum(0)
