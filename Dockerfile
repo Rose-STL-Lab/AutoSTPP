@@ -17,7 +17,7 @@ SHELL ["conda", "run", "-n", "autoint", "/bin/bash", "-c"]
 RUN poetry install
 
 # Install make
-RUN apt update && apt install -y make
+RUN apt update && apt install -y make rsync
 
 # Setup Github SSH private key
 ADD ./id_rsa /root/.ssh/id_rsa

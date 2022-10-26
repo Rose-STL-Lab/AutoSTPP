@@ -31,8 +31,8 @@ class ReQUFlip(nn.Module):
 
     @staticmethod
     def forward(x):
-        return torch.where(-x > 0., 0.125 * x ** 2 - 0.5 * x + np.log(2.),
-                           torch.log(torch.exp(-x) + torch.tensor(1.)))
+        return -torch.where(x > 0., 0.125 * x ** 2 + 0.5 * x + np.log(2.),
+                            torch.log(torch.exp(x) + torch.tensor(1.)))
 
 
 class MultSequential(nn.Sequential):
@@ -60,10 +60,12 @@ class MultSequential(nn.Sequential):
         'ReQU': [lambda _, x: torch.where(x > 0., 0.25 * x + 0.5, 1. / (1. + torch.exp(-x))),
                  lambda _, x: torch.where(x > 0., 0.25 * torch.ones_like(x), torch.exp(-x) / (1 + torch.exp(-x)) ** 2),
                  lambda _, x: torch.where(x > 0., torch.zeros_like(x),
-                                          - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)]
+                                          - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)],
+        'ReQUFlip': [lambda _, x: -torch.where(x > 0., 0.25 * x + 0.5, 1. / (1. + torch.exp(-x))),
+                     lambda _, x: -torch.where(x > 0., 0.25 * torch.ones_like(x), torch.exp(-x) / (1 + torch.exp(-x)) ** 2),
+                     lambda _, x: -torch.where(x > 0., torch.zeros_like(x),
+                                               - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)]
     }
-
-    acDict['ReQUFlip'] = [lambda _, x: ac(_, -x) for ac in acDict['ReQU']]  # ReQUFlip is ReQU flipped about y-axis
 
     @staticmethod
     def hash(dims: List[int]) -> str:

@@ -11,7 +11,7 @@ params = {}
 def model(device, request):
     import torch
     from torch import nn
-    from integration.autoint import MixSequential
+    from integration.autoint import MixSequential, ReQU, ReQUFlip
 
     update_params("model", request)
 
@@ -27,7 +27,9 @@ def model(device, request):
     act_dict = {
         "tanh": nn.Tanh(),
         "sigmoid": nn.Sigmoid(),
-        "sine": Sine()
+        "sine": Sine(),
+        "requ": ReQU(),
+        "requflip": ReQUFlip()
     }
     act_layer = act_dict[request.param['act']]
 

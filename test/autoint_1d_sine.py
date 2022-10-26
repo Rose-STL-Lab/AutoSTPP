@@ -15,7 +15,7 @@ def log(model, dataloader):
 
 
 @pytest.fixture(
-    scope="class",
+    scope="module",
     params=pytest.params['dataloader']
 )
 def dataloader(device, request):
@@ -80,7 +80,7 @@ def trained_model(model, dataloader, device, request):
     epoch = 0
     loss = torch.tensor(1.0)
 
-    while loss.item() > 5e-5:
+    while loss.item() > 1e-3:
         current_loss = []
         epoch += 1
 
@@ -160,7 +160,7 @@ class TestClass:
         self.plot(x, f_gt, f_pd, r"$f(x) \text{ after fitting } f'''(x)$", "original_f")
 
         diff = abs(f_pd - f_gt)
-        assert np.mean(diff) < 0.01  # Assert the error is smaller than .01
+        assert np.mean(diff) < 0.05  # Assert the error is smaller than .05
 
     def test_1st_derivative(self, trained_model, device):
         import torch
@@ -176,7 +176,7 @@ class TestClass:
         self.plot(x, f_gt, f_pd, r"$f'(x) \text{ after fitting } f'''(x)$", "1st_derivative")
 
         diff = abs(f_pd - f_gt)
-        assert np.mean(diff) < 0.01  # Assert the error is smaller than .01
+        assert np.mean(diff) < 0.05  # Assert the error is smaller than .05
 
     def test_2nd_derivative(self, trained_model, device):
         import torch
@@ -192,4 +192,4 @@ class TestClass:
         self.plot(x, f_gt, f_pd, r"$f''(x) \text{ after fitting } f'''(x)$", "2nd_derivative")
 
         diff = abs(f_pd - f_gt)
-        assert np.mean(diff) < 0.01  # Assert the error is smaller than .01
+        assert np.mean(diff) < 0.05  # Assert the error is smaller than .05
