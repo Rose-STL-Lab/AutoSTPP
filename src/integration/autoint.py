@@ -60,11 +60,7 @@ class MultSequential(nn.Sequential):
         'ReQU': [lambda _, x: torch.where(x > 0., 0.25 * x + 0.5, 1. / (1. + torch.exp(-x))),
                  lambda _, x: torch.where(x > 0., 0.25 * torch.ones_like(x), torch.exp(-x) / (1 + torch.exp(-x)) ** 2),
                  lambda _, x: torch.where(x > 0., torch.zeros_like(x),
-                                          - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)],
-        'ReQUFlip': [lambda _, x: -torch.where(x > 0., 0.25 * x + 0.5, 1. / (1. + torch.exp(-x))),
-                     lambda _, x: -torch.where(x > 0., 0.25 * torch.ones_like(x), torch.exp(-x) / (1 + torch.exp(-x)) ** 2),
-                     lambda _, x: -torch.where(x > 0., torch.zeros_like(x),
-                                               - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)]
+                                          - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)]
     }
 
     @staticmethod
@@ -234,9 +230,14 @@ class MultSequential(nn.Sequential):
                 pd.append(pd[-1] @ F.relu(module.weight).T)
             elif tp == 'PadLinear':
                 pd.append(pd[-1] @ module.padded_weight().T)
-            elif tp in self.acDict:
+            elif tp in self.acDict or tp[:-4] in self.acDict:
+                if flip := tp.endswith('Flip'):  # Whether add a negative sign
+                    tp = tp[:-4]
+                acs = self.acDict[tp]
+                flip = -1 if flip else 1
+
                 if N == 1:
-                    term_sum = self.acDict[tp][0](self.f[i + 1], self.f[i]) * pd[-1]  # Base case
+                    term_sum = flip * acs[0](self.f[i + 1], self.f[i]) * pd[-1]  # Base case
                 else:
                     term_sum = 0.
                     # ac(n)   * df/dx1 * df/dx2 * df/dx3 ... * df/dxn
@@ -254,8 +255,8 @@ class MultSequential(nn.Sequential):
                                 for dim in part:
                                     temp = temp * self.dnf[self.hash(list(dim))][i]
                                 term += temp
-                        assert order < len(self.acDict[tp]), "Activation high-order derivative not implemented"
-                        term_sum += term * self.acDict[tp][order](self.f[i + 1], self.f[i])
+                        assert order < len(acs), "Activation high-order derivative not implemented"
+                        term_sum += term * flip * acs[order](self.f[i + 1], self.f[i])
                 pd.append(term_sum)
             else:
                 raise NotImplementedError
@@ -368,7 +369,7 @@ class Cuboid(nn.Module):
                                    nn.Linear(128, 1)
                                    )
         if M is not None:
-            self.L = L
+            self.M = M
         else:
             self.M = MixSequential(nn.Linear(3, 128),
                                    ReQU(),
