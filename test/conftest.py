@@ -24,7 +24,7 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
     :return: a double dictionary mapping
         fixture name -> config name -> list of config options
     """
-    from utils import load_config, dict_to_list
+    from utils import load_config, dict_to_list, default_fmt
     from loguru import logger
     import sys
 
@@ -36,8 +36,7 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
     fn = fn.split('.')[0]
 
     # Add a file logger
-    fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
-    logger.add(f'{relpath_under("logs", fn)}.log', format=fmt, level="DEBUG")
+    logger.add(f'{relpath_under("logs", fn)}.log', format=default_fmt, level="DEBUG")
 
     configs: Dict[str, Dict[str, List]] = load_config(fn)
     pytest.config = deepcopy(configs)
@@ -87,3 +86,11 @@ def relpath(prefix: str, create_dir: bool = False) -> str:
     if create_dir and not os.path.exists(new_path):
         os.makedirs(new_path)
     return new_path
+
+
+def log_config() -> None:
+    """
+    Log the config for current test
+    """
+    from loguru import logger
+    logger.info(pytest.fn_params)

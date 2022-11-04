@@ -40,6 +40,8 @@ tqdm = lambda *argv: tqdm_(*argv, position=0, leave=True, ncols=100)  # Override
 trange = lambda *argv: trange_(*argv, position=0, leave=True, ncols=100)
 tenumerate = lambda *argv: tenumerate_(*argv, position=0, leave=True, ncols=100)
 
+default_fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -355,5 +357,40 @@ def serialize_config(config: Dict) -> str:
     return str(config).replace(':', '=').replace(' ', '').replace('\'', '')[1:-1]
 
 
+def scale(tensor, bound):
+    """
+    Scale a uniform tensor using MinMax's
+    :param tensor: tensor shape (N, d)
+    :param bound: a list of d two-tuples defining MinMax
+    :return: the scaled tensor with shape (N, d)
+    """
+    d = len(bound)
+    assert len(bound) == len(tensor[0])
+    for i in range(d):
+        tensor[:, i] = tensor[:, i] * (bound[i][1] - bound[i][0]) + bound[i][0]
+    return tensor
+
+
+# TODO: Add torch support
+def arange(N: int, bound = None):
+    """
+    Higher (d) dimensional version of np/torch arange
+
+    :param bound: a list of `d` two-tuples defining MinMax
+    :param N: number of data points for each dimension
+    :return: ((N+1)**d, d) border-inclusive tensor uniformly covering the bounded region
+    """
+    d = len(bound)
+    ticks = np.arange(0., 1. + 1. / N, 1. / N)
+    X = np.meshgrid(*([ticks] * d))
+    X = np.vstack([X_.flatten() for X_ in X]).T
+    if bound is not None:
+        X = scale(X, bound)
+    return X
+
+
 if __name__ == '__main__':
-    logger.info(get_device(min_ram=0))
+    # logger.info(get_device(min_ram=0))
+    X_flat = arange(100, [[0., 1.], [0., 2.], [0., 3.]])
+    logger.info(X_flat)
+    logger.info(X_flat.shape)
