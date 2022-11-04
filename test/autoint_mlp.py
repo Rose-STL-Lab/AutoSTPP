@@ -9,19 +9,10 @@ params = {}
     params=pytest.params['model']
 )
 def model(device, request):
-    import torch
     from torch import nn
-    from integration.autoint import MixSequential, ReQU, ReQUFlip
+    from integration.autoint import MixSequential, ReQU, ReQUFlip, Sine, SineFlip
 
     update_params("model", request)
-
-    class Sine(nn.Module):
-        def __init__(self):
-            super().__init__()  # init the base class
-
-        @staticmethod
-        def forward(x):
-            return torch.sin(x)
 
     # Load activation function
     act_dict = {
@@ -29,7 +20,8 @@ def model(device, request):
         "sigmoid": nn.Sigmoid(),
         "sine": Sine(),
         "requ": ReQU(),
-        "requflip": ReQUFlip()
+        "requflip": ReQUFlip(),
+        "sineflip": SineFlip()
     }
     act_layer = act_dict[request.param['act']]
 

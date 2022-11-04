@@ -35,6 +35,24 @@ class ReQUFlip(nn.Module):
                             torch.log(torch.exp(x) + torch.tensor(1.)))
 
 
+class Sine(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+
+    @staticmethod
+    def forward(x):
+        return torch.sin(x)
+
+
+class SineFlip(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+
+    @staticmethod
+    def forward(x):
+        return - torch.sin(x)
+
+
 class MultSequential(nn.Sequential):
     """
     The optimized integral-net
