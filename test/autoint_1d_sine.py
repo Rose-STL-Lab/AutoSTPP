@@ -19,37 +19,16 @@ def log(model, dataloader):
     params=pytest.params['dataloader']
 )
 def dataloader(device, request):
-    import torch
     import numpy as np
-    from scipy.integrate import quad
     from torch.utils.data import DataLoader
+    from data.toy import Integral1DWrapper
 
     update_params('dataloader', request)
-
-    class Integral1DWrapper(torch.utils.data.Dataset):
-        """
-        Wrap x, f(x), and F(x)=∫[0, x] f(t)dt for x in R^1
-        """
-
-        def __init__(self, bound, fn, sampling_density):
-            self.X = torch.rand(sampling_density) * (bound[1] - bound[0]) + bound[0]
-            self.f = fn(self.X)
-            self.F = torch.tensor([quad(fn, bound[0], x)[0] for x in self.X])
-
-            self.X = self.X.float().to(device)
-            self.f = self.f.float().to(device)
-            self.F = self.F.float().to(device)
-
-        def __len__(self):
-            return len(self.X)
-
-        def __getitem__(self, idx):
-            return self.X[idx], self.f[idx], self.F[idx]
 
     def func_to_fit(X):
         return np.sin(X)
 
-    dataset = Integral1DWrapper([Xa, Xb], func_to_fit, sampling_density=1024)
+    dataset = Integral1DWrapper([Xa, Xb], func_to_fit, sampling_density=1024, device=device)
     return DataLoader(dataset, shuffle=True, batch_size=request.param['batch_size'])
 
 
