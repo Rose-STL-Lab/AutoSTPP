@@ -371,19 +371,20 @@ def scale(tensor, bound):
     return tensor
 
 
-# TODO: Add torch support
-def arange(N: int, bound = None):
+def arange(N: int, bound, lib: Any = np):
     """
     Higher (d) dimensional version of np/torch arange
 
-    :param bound: a list of `d` two-tuples defining MinMax
     :param N: number of data points for each dimension
+    :param bound: a list of `d` two-tuples defining MinMax
+    :param lib: the tensor library, numpy or torch
     :return: ((N+1)**d, d) border-inclusive tensor uniformly covering the bounded region
     """
+    assert lib == torch or lib == np, "Unsupported library"
     d = len(bound)
-    ticks = np.arange(0., 1. + 1. / N, 1. / N)
-    X = np.meshgrid(*([ticks] * d))
-    X = np.vstack([X_.flatten() for X_ in X]).T
+    ticks = lib.arange(0., 1. + 1. / N, 1. / N)
+    X = lib.meshgrid(*([ticks] * d))
+    X = lib.vstack([X_.flatten() for X_ in X]).T
     if bound is not None:
         X = scale(X, bound)
     return X
@@ -391,6 +392,6 @@ def arange(N: int, bound = None):
 
 if __name__ == '__main__':
     # logger.info(get_device(min_ram=0))
-    X_flat = arange(100, [[0., 1.], [0., 2.], [0., 3.]])
+    X_flat = arange(100, [[0., 1.], [0., 2.], [0., 3.]], lib=np)
     logger.info(X_flat)
     logger.info(X_flat.shape)
