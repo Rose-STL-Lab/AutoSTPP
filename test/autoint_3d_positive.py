@@ -40,11 +40,10 @@ def cuboid(device, model):
     scope="module",
     params=pytest.params['dataloader']
 )
-def dataloader(device, request):
+def dataset(device, request):
     import os
     import torch
     from utils import relpath_under
-    from torch.utils.data import DataLoader
     from data.toy import Integral3DWrapper
 
     update_params('dataloader', request)
@@ -57,6 +56,15 @@ def dataloader(device, request):
                                     request.param['sampling_density'], device)
         torch.save(dataset, dataset_fn)
 
+    return dataset
+
+
+@pytest.fixture(
+    scope="module",
+    params=pytest.params['dataloader']
+)
+def dataloader(dataset, request):
+    from torch.utils.data import DataLoader
     return DataLoader(dataset, shuffle=True, batch_size=request.param['batch_size'])
 
 
@@ -66,9 +74,9 @@ def integral_mse_loss():
         """
         Calculate the MSE between dataset integrals and integral network output
 
-        :param x: (N, 2), dataset x
-        :param _: not using dataset integrants
-        :param targets: dataset integrals
+        :param x: (N, 3), dataset x
+        :param _: (N,), not using dataset integrants
+        :param targets: (N,) dataset integrals
         :param model: the cuboid model
         :return: the MSE loss, scalar
         """
@@ -80,6 +88,7 @@ def integral_mse_loss():
                            torch.ones_like(x[:, 2]) * torch.tensor(Za), x[:, 2]).squeeze(-1)
         loss = loss_func(F, targets)
         return loss
+
     return _integral_mse_loss
 
 
@@ -89,9 +98,9 @@ def gradient_mse_loss():
         """
         Calculate the MSE between dataset integrants and derivative network output
 
-        :param x: (N, 2), dataset x
-        :param integrants: dataset integrants
-        :param _: not using dataset targets
+        :param x: (N, 3), dataset x
+        :param integrants: (N,), dataset integrants
+        :param _: (N,), not using dataset targets
         :param model: the cuboid model
         :return: the MSE loss, scalar
         """
@@ -101,6 +110,7 @@ def gradient_mse_loss():
         f = model(x).squeeze(-1)
         loss = loss_func(integrants, f)
         return loss
+
     return _gradient_mse_loss
 
 
@@ -167,10 +177,29 @@ def trained_model(cuboid, dataloader, device, request):
 
 class TestClass:
 
-    # TODO: increase speed
+    def test_integral_fit_fast(self, dataset, trained_model, device):
+        """
+        Test the error of the learned integral function using the training dataset
+
+        :param trained_model: the trained model (on either integral or integrant)
+        :param device: GPU device
+        """
+        import torch
+        from loguru import logger
+
+        X = dataset.X
+        F_gt = dataset.F.cpu().detach().numpy()
+        F_pd = trained_model.int_lamb(torch.ones_like(X[:, 0]) * torch.tensor(Xa), X[:, 0],
+                                      torch.ones_like(X[:, 1]) * torch.tensor(Ya), X[:, 1],
+                                      torch.ones_like(X[:, 2]) * torch.tensor(Za), X[:, 2])
+        F_pd = F_pd.squeeze(-1).cpu().detach().numpy()
+
+        logger.error(abs(F_gt - F_pd).mean())
+
+    @pytest.mark.skip(reason="Calculating triple integral is slow")
     def test_integral_fit(self, trained_model, device):
         """
-        Test the error of the learned integral function
+        Test the error of the learned integral function using regularly sampled points in 3D
 
         :param trained_model: the trained model (on either integral or integrant)
         :param device: GPU device
@@ -196,7 +225,7 @@ class TestClass:
     # TODO: add visualization
     def test_integrant_fit(self, trained_model, device):
         """
-        Test the error of the learned integrant function
+        Test the error of the learned integrant function using regularly sampled points in 3D
 
         :param trained_model: the trained model (on either integral integrant)
         :param device: GPU device
