@@ -1,9 +1,15 @@
+from typing import Union, List
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.colors as mcolors
 import plotly.graph_objects as go
 from tqdm.auto import tqdm
 from utils import relpath_under
+from scipy.stats import multivariate_normal
+from plotly.subplots import make_subplots
+from visualization.rose import rose_vivid, mpl_to_plotly
 
 
 def visualize_diff(outputs, targets, portion=1., fn=None):
@@ -152,37 +158,97 @@ def plot_lambst_static(lambs, x_range, y_range, t_range, fps, scaler=None, cmin=
     return ani
 
 
-def plot_lambst_interactive(lambs, x_range, y_range, t_range, cmin=None, cmax=None,
-                            scaler=None, heatmap=False):
+def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_range, cmin=None, cmax=None,
+                            scaler=None, heatmap=False, colorscale=rose_vivid, show=True,
+                            master_title='Spatio-temporal Conditional Intensity', subplot_titles=None):
     """
-    :param lambs: list, len(lambs) = len(t_range), element: [len(x_range), len(y_range)]
+    :param lambs:   3D Array-like sampled intensities of shape (t_range, x_range, y_range)
+                    or 4D Array-like of shape (N, ...) to compare plots side-by-side
+    :param x_range: 1D Array-like, specifying sampling x's locations
+    :param y_range: 1D Array-like, specifying sampling y's locations
+    :param t_range: 1D Array_like, specifying sampling t's locations
+    :param cmin: lower bound of lambs axis, 0 if unspecified
+    :param cmax: upper bound of lambs axis, max(lambs) if unspecified
+    :param scaler: scipy.MinMaxScaler, used for scaling the intensities
+    :param heatmap: whether draw the intensities as a heatmap instead of 3D surface plot
+    :param colorscale: Color scales used for surface
+    :param show: whether to show the figure
+    :param master_title: the one title above all
+    :param subplot_titles: 1D Array of N str, title of each side-by-side comparison plot
     """
-    # Inverse transform the range to the actual scale
-    if scaler is not None:
+    if colorscale is not None:
+        if issubclass(type(colorscale), mcolors.Colormap):
+            colorscale = mpl_to_plotly(colorscale, 255)
+        else:
+            assert type(colorscale) == list and type(colorscale[0][1]) == str, "Unrecognized colorscale"
+
+    if scaler is not None:  # Inverse transform the range to the actual scale
         x_range, y_range, t_range = inverse_transform(x_range, y_range, t_range, scaler)
 
+    n_subplot = 1
+    if type(lambs) == list:  # Convert lists to numpy array
+        lambs = np.array(lambs)
+
+    # Shape checks
+    if len(lambs.shape) == 4:
+        n_subplot = len(lambs)
+        lambs_shape = lambs.shape[1:]
+        lambs = lambs.transpose([1, 0, 2, 3])  # Put time before N
+        assert subplot_titles is None or len(subplot_titles) == n_subplot
+    else:
+        assert len(lambs.shape) == 3
+        lambs_shape = lambs.shape
+    assert lambs_shape == (len(t_range), len(x_range), len(y_range))
+
     if cmin is None:
-        cmin = 0
-    if cmax == "outlier":
-        cmax = np.max([np.max(lamb_st) for lamb_st in lambs])
+        cmin = min(0, np.min(lambs))
     if cmax is None:
         cmax = np.max(lambs)
     frames = []
 
     for i, lamb_st in enumerate(lambs):
-        if heatmap:
-            frames.append(go.Frame(data=[go.Heatmap(z=lamb_st, x=x_range, y=y_range, zmin=cmin,
-                                                    zmax=cmax)], name="{:.2f}".format(t_range[i])))
+        if n_subplot != 1:
+            data = []
+            for j, lamb_st_i in enumerate(lamb_st):
+                if heatmap:
+                    data.append(go.Heatmap(z=lamb_st_i, x=x_range, y=y_range, zmin=cmin, zmax=cmax,
+                                           colorscale=colorscale))
+                else:
+                    data.append(go.Surface(z=lamb_st_i, x=x_range, y=y_range, cmin=cmin, cmax=cmax,
+                                           colorscale=colorscale))
+            frames.append(go.Frame(data=data, name="{:.2f}".format(t_range[i])))
         else:
-            frames.append(go.Frame(data=[go.Surface(z=lamb_st, x=x_range, y=y_range, cmin=cmin,
-                                                    cmax=cmax)], name="{:.2f}".format(t_range[i])))
+            if heatmap:
+                data = go.Heatmap(z=lamb_st, x=x_range, y=y_range, zmin=cmin, zmax=cmax, colorscale=colorscale)
+            else:
+                data = go.Surface(z=lamb_st, x=x_range, y=y_range, cmin=cmin, cmax=cmax, colorscale=colorscale)
+            frames.append(go.Frame(data=data, name="{:.2f}".format(t_range[i])))
 
-    fig = go.Figure(frames=frames)
-    # Add data to be displayed before animation starts
-    if heatmap:
-        fig.add_trace(go.Heatmap(z=lambs[0], x=x_range, y=y_range, zmin=cmin, zmax=cmax))
+    if n_subplot != 1:
+        if heatmap:
+            specs = [[{"type": "xy"}] * n_subplot]
+        else:
+            specs = [[{"type": "scene"}] * n_subplot]
+        fig = make_subplots(rows=1, cols=n_subplot, horizontal_spacing=0.05,
+                            specs=specs, subplot_titles=subplot_titles)
+        fig.frames = frames
     else:
-        fig.add_trace(go.Surface(z=lambs[0], x=x_range, y=y_range, cmin=cmin, cmax=cmax))
+        fig = go.Figure(frames=frames)
+
+    # Add data to be displayed before animation starts
+    if n_subplot != 1:
+        for j, lamb_st_i in enumerate(lambs[0]):
+            if heatmap:
+                fig.add_trace(go.Heatmap(z=lamb_st_i, x=x_range, y=y_range, zmin=cmin, zmax=cmax,
+                                         colorscale=colorscale), row=1, col=j+1)
+            else:
+                fig.add_trace(go.Surface(z=lamb_st_i, x=x_range, y=y_range, cmin=cmin, cmax=cmax,
+                                         colorscale=colorscale), row=1, col=j+1)
+    else:
+        if heatmap:
+            fig.add_trace(go.Heatmap(z=lambs[0], x=x_range, y=y_range, zmin=cmin, zmax=cmax, colorscale=colorscale))
+        else:
+            fig.add_trace(go.Surface(z=lambs[0], x=x_range, y=y_range, cmin=cmin, cmax=cmax, colorscale=colorscale))
 
     # Slider
     sliders = [
@@ -202,15 +268,17 @@ def plot_lambst_interactive(lambs, x_range, y_range, t_range, cmin=None, cmax=No
         }
     ]
 
+    fig.update_scenes(  # Control zaxis for all subplots
+            aspectmode='cube',
+            zaxis_title='λ',
+            zaxis=dict(range=[cmin, cmax], autorange=False)
+        )
+
     # Layout
     fig.update_layout(
-        title='Spatio-temporal Conditional Intensity',
-        width=600,
-        height=600,
-        scene=dict(
-            zaxis=dict(range=[cmin, cmax], autorange=False),
-            aspectratio=dict(x=1, y=1, z=1),
-        ),
+        title=master_title,
+        width=500 * n_subplot + 180,
+        height=700,
         updatemenus=[
             {
                 "buttons": [
@@ -234,7 +302,9 @@ def plot_lambst_interactive(lambs, x_range, y_range, t_range, cmin=None, cmax=No
         ],
         sliders=sliders
     )
-    fig.show()
+    if show:
+        fig.show()
+    return fig
 
 
 class TrajectoryPlotter:
@@ -348,8 +418,8 @@ if __name__ == '__main__':
         else:
             raise NotImplementedError
 
-    visualize_diff_0_step(option="visualize_diff")
-    visualize_diff_0_step(option="TrajectoryPlotter")
+    # visualize_diff_0_step(option="visualize_diff")
+    # visualize_diff_0_step(option="TrajectoryPlotter")
 
     def visualize_diff_3_step(option):
         X = np.arange(0, 1, 0.01)
@@ -367,5 +437,41 @@ if __name__ == '__main__':
         else:
             raise NotImplementedError
 
-    visualize_diff_3_step(option="visualize_diff")
-    visualize_diff_3_step(option="TrajectoryPlotter")
+    # visualize_diff_3_step(option="visualize_diff")
+    # visualize_diff_3_step(option="TrajectoryPlotter")
+
+    def gaussian_mixture(coef_1, coef_2):
+        """
+        Calculate two-Gaussian mixture intensity based on the given coefficients,
+        with spatial domain [0,1]x[0,1] and resolution of [0.01x0.01]
+
+        :param coef_1: coef of first Gaussian
+        :param coef_2: coef of second Gaussian
+        :return: [101x101] intensity
+        """
+        from utils import arange
+        mesh = arange(100, [[0., 1.], [0., 1.]], np)
+        pdf1 = multivariate_normal.pdf(mesh, mean=np.array([0.2, 0.2]),
+                                       cov=np.array([[0.05, 0], [0, 0.05]])).reshape(101, 101) * coef_1
+        pdf2 = multivariate_normal.pdf(mesh, mean=np.array([0.5, 0.7]),
+                                       cov=np.array([[0.02, 0], [0, 0.02]])).reshape(101, 101) * coef_2
+        return pdf1 + pdf2
+
+    def visualize_lambs_interactive(heatmap):
+        x_range = np.arange(0.0, 1.01, 0.01)
+        y_range = np.arange(0.0, 1.01, 0.01)
+        t_range = np.arange(0.0, 40.1, 0.50)
+        lambs  = [gaussian_mixture(np.cos(t) + 1.0, np.sin(t) + 1.0) for t in t_range]
+        lambs1 = [lamb_st + np.random.normal(loc=0.0, scale=0.05, size=lamb_st.shape) for lamb_st in lambs]
+        lambs2 = [lamb_st + np.random.normal(loc=0.0, scale=0.2, size=lamb_st.shape) for lamb_st in lambs]
+
+        fig1 = plot_lambst_interactive([lambs, lambs1, lambs2], x_range, y_range, t_range, cmin=None, cmax=None,
+                                       scaler=None, heatmap=heatmap, colorscale=rose_vivid,
+                                       subplot_titles=["Ground truth", "Predict by 1", "Predict by 2"])
+        fig1.write_html(f"{relpath_under('figs', create_dir=True)}/interactive.html")
+
+        fig2 = plot_lambst_interactive(lambs, x_range, y_range, t_range, cmin=None, cmax=None,
+                                       scaler=None, heatmap=heatmap, colorscale=rose_vivid)
+        fig2.write_html(f"{relpath_under('figs', create_dir=True)}/interactive_single.html")
+
+    visualize_lambs_interactive(heatmap=False)

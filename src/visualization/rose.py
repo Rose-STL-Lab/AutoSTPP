@@ -1,11 +1,10 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 
 def normalize_color(color):
     r, g, b = color
-    return (r / 255.0, g / 255.0, b / 255.0)
+    return r / 255.0, g / 255.0, b / 255.0
 
 
 def color_list(colors):
@@ -18,10 +17,12 @@ def color_list(colors):
     return res[:-1]
 
 
-def make_colormap(seq):
-    """Return a LinearSegmentedColormap
-    seq: a sequence of floats and RGB-tuples. The floats should be increasing
-    and in the interval (0,1).
+def make_colormap(seq) -> mcolors.LinearSegmentedColormap:
+    """
+    Return a LinearSegmentedColormap
+    :param seq: a sequence of floats and RGB-tuples. The floats should be increasing
+                and in the interval (0,1).
+    :return: a PLT LinearSegmentedColormap
     """
     seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
     cdict = {'red': [], 'green': [], 'blue': []}
@@ -33,6 +34,20 @@ def make_colormap(seq):
             cdict['green'].append([item, g1, g2])
             cdict['blue'].append([item, b1, b2])
     return mcolors.LinearSegmentedColormap('CustomMap', cdict)
+
+
+def mpl_to_plotly(cmap, pl_entries: int = 255, r_digits: int = 2):
+    """
+    Convert matplotlib cmap to plotly colorscale
+    :param cmap: colormap
+    :param pl_entries: number of Plotly colorscale entries
+    :param r_digits: number of digits for rounding scale values
+    :return: plotly colorscale
+    """
+    scale = np.linspace(0, 1, pl_entries)
+    colors = (cmap(scale)[:, :3]*255).astype(np.uint8)
+    pl_colorscale = [[round(s, r_digits), f'rgb{tuple(color)}'] for s, color in zip(scale, colors)]
+    return pl_colorscale
 
 
 rose_muted = make_colormap(color_list([
@@ -58,3 +73,8 @@ rose = make_colormap(color_list([
                 (194, 30, 86),
                 (213, 55, 107),
                 (157, 23, 69)]))
+
+
+if __name__ == '__main__':
+    print(issubclass(type(rose), mcolors.Colormap))
+    print(mpl_to_plotly(rose, 255))
