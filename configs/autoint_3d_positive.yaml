@@ -3,11 +3,11 @@ dataloader:
   sampling_density: 1024
   regenerate: false
 model:
-  act: ['sine']
-  n_layers: [3]
-  hid_dim: [128]
+  act: ['sine', 'requ']
+  n_layers: [2, 3]
+  hid_dim: [64, 128]
   inp_dim: 3
   out_dim: 1
 trained_model:
-  retrain: true
+  retrain: false
   loss_func: ['integral_mse_loss', 'gradient_mse_loss']
