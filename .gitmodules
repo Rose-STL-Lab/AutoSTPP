@@ -1,0 +1,3 @@
+[submodule "src/visualization/rose_colormap"]
+	path = src/visualization/rose_colormap
+	url = git@github.com:Rose-STL-Lab/rose_colormap.git

@@ -1,15 +1,15 @@
 from typing import Union, List
 
+from loguru import logger
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-import matplotlib.colors as mcolors
 import plotly.graph_objects as go
 from tqdm.auto import tqdm
 from utils import relpath_under
 from scipy.stats import multivariate_normal
 from plotly.subplots import make_subplots
-from visualization.rose import rose_vivid, mpl_to_plotly
+from visualization.rose_colormap.plotly import rose_vivid
 
 
 def visualize_diff(outputs, targets, portion=1., fn=None):
@@ -176,11 +176,7 @@ def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_ra
     :param master_title: the one title above all
     :param subplot_titles: 1D Array of N str, title of each side-by-side comparison plot
     """
-    if colorscale is not None:
-        if issubclass(type(colorscale), mcolors.Colormap):
-            colorscale = mpl_to_plotly(colorscale, 255)
-        else:
-            assert type(colorscale) == list and type(colorscale[0][1]) == str, "Unrecognized colorscale"
+    assert type(colorscale) == list and type(colorscale[0][1]) == str, "Unrecognized colorscale"
 
     if scaler is not None:  # Inverse transform the range to the actual scale
         x_range, y_range, t_range = inverse_transform(x_range, y_range, t_range, scaler)
@@ -399,7 +395,9 @@ class TrajectoryPlotter:
         if fn is None:
             fn = "trajectory_plot"
         fig = go.Figure(data=self.data, layout=self.layout)
-        fig.write_html(f"{relpath_under('figs', create_dir=True)}/{fn}.html")
+        full_fn = f"{relpath_under('figs', create_dir=True)}/{fn}.html"
+        logger.info(f"Saving trajectories to {full_fn}...")
+        fig.write_html(full_fn)
 
 
 if __name__ == '__main__':
@@ -466,12 +464,16 @@ if __name__ == '__main__':
         lambs2 = [lamb_st + np.random.normal(loc=0.0, scale=0.2, size=lamb_st.shape) for lamb_st in lambs]
 
         fig1 = plot_lambst_interactive([lambs, lambs1, lambs2], x_range, y_range, t_range, cmin=None, cmax=None,
-                                       scaler=None, heatmap=heatmap, colorscale=rose_vivid,
+                                       scaler=None, heatmap=heatmap, colorscale=rose_vivid, show=False,
                                        subplot_titles=["Ground truth", "Predict by 1", "Predict by 2"])
-        fig1.write_html(f"{relpath_under('figs', create_dir=True)}/interactive.html")
+        full_fn = f"{relpath_under('figs', create_dir=True)}/interactive.html"
+        logger.info(f"Saving intensities to {full_fn}...")
+        fig1.write_html(full_fn)
 
         fig2 = plot_lambst_interactive(lambs, x_range, y_range, t_range, cmin=None, cmax=None,
-                                       scaler=None, heatmap=heatmap, colorscale=rose_vivid)
-        fig2.write_html(f"{relpath_under('figs', create_dir=True)}/interactive_single.html")
+                                       scaler=None, heatmap=heatmap, colorscale=rose_vivid, show=False)
+        full_fn = f"{relpath_under('figs', create_dir=True)}/interactive_single.html"
+        logger.info(f"Saving intensities to {full_fn}...")
+        fig2.write_html(full_fn)
 
     visualize_lambs_interactive(heatmap=False)
