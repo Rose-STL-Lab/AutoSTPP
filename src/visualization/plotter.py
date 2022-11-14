@@ -9,7 +9,7 @@ from tqdm.auto import tqdm
 from utils import relpath_under
 from scipy.stats import multivariate_normal
 from plotly.subplots import make_subplots
-from visualization.rose_colormap.plotly import rose_vivid
+from rose_colormap.plotly import rose_vivid
 
 
 def visualize_diff(outputs, targets, portion=1., fn=None):
