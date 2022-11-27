@@ -77,10 +77,10 @@ docker_gpu_support:
 #################################################################################
 
 test_1d_sine:
-	poetry run python -m pytest -s test/autoint_1d_sine.py
+	poetry run python -m pytest -s test/test_autoint_1d_sine.py
 
 test_speed_benchmark:
-	poetry run python -m pytest -s test/autoint_speed_benchmark.py
+	poetry run python -m pytest -s test/test_autoint_speed_benchmark.py
 
 #################################################################################
 # Self Documenting Commands                                                     #

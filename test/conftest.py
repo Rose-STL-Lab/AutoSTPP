@@ -15,34 +15,18 @@ def device():
     return get_device(free=False, min_ram=8000)
 
 
-@typechecked
-def pytest_configure() -> Dict[str, Dict[str, List]]:
-    """
-    Load the test config for current test, as a dictionary of lists.
-    All combinations of listed config option will be tested.
-
-    :return: a double dictionary mapping
-        fixture name -> config name -> list of config options
-    """
-    from utils import load_config, dict_to_list, default_fmt
+def get_params(key: str, caller_fn: str = ''):
+    from utils import load_config, dict_to_list
     from loguru import logger
-    import sys
-
-    # NOTICE: test config should always be dictionary of lists
-    fn = sys.argv[-1]  # Current test file name
-    if '.py' not in fn:
-        logger.error('Test config file not found')
-        raise FileNotFoundError
-    fn = fn.split('.')[0]
-
-    # Add a file logger
-    logger.add(f'{relpath_under("logs", fn)}.log', format=default_fmt, level="DEBUG")
-
+    if caller_fn == '':  # No filename given
+        caller_fn = inspect.stack()[1].filename  # Absolute path
+        
+    fn = caller_fn.split('.')[0].split('/')[-1]  # Relative path
+    logger.debug(f'Loading {key} config from configs/{fn}.yaml')
     configs: Dict[str, Dict[str, List]] = load_config(fn)
-    pytest.config = deepcopy(configs)
+    pytest.config[caller_fn] = deepcopy(configs)
 
-    pytest.fn_params = {}  # Parameters that need to be in the filename
-    for fixture_name in pytest.config:
+    for fixture_name in pytest.config[caller_fn]:
         if type(configs[fixture_name]) is not dict:  # Non-fixture parameters
             del configs[fixture_name]
             continue
@@ -54,8 +38,51 @@ def pytest_configure() -> Dict[str, Dict[str, List]]:
             else:
                 configs[fixture_name][config_name] = [configs[fixture_name][config_name]]   # Make it a list
 
-    pytest.params = {fixture_name: dict_to_list(configs[fixture_name]) for fixture_name in configs}
-    return configs
+    params = {fixture_name: dict_to_list(configs[fixture_name]) for fixture_name in configs}
+    return params[key]
+
+
+def pytest_configure():
+    """
+    Load the test config for current test, as a double dictionary mapping 
+    fixture name -> config name -> list of config options
+    All combinations of listed config option will be tested.
+    """
+    from utils import default_fmt
+    from loguru import logger
+    import sys
+
+    # NOTICE: test config should always be dictionary of lists
+    fn = sys.argv[-1]  # Current test file name
+    fn = fn.split('.')[0]
+    pytest.fn = fn
+    pytest.fn_params = {}  # Parameters that need to be in the filename
+    pytest.config = {}  # Configs for different test files
+    # Add a file logger
+    logger.add(f'{relpath_under("logs", fn)}.log', format=default_fmt, level="DEBUG")
+    pytest.result = {}
+
+
+def put_result(name: str, value) -> None:
+    """
+    Store the result in the dictionary with the given config
+    :param name: key of the result
+    :param value: value of the result, can be any type
+    """
+    if str(pytest.fn_params) not in pytest.result:
+        pytest.result[str(pytest.fn_params)] = {}
+    pytest.result[str(pytest.fn_params)][name] = value
+
+
+def pytest_unconfigure():
+    """
+    Run after all tests, to parse and store the test results
+    """
+    from loguru import logger
+    logger.debug(pytest.config)
+    if hasattr(pytest, 'fn') and hasattr(pytest, 'result'):
+        logger.info(pytest.fn)
+        logger.info(pytest.result)
 
 
 def update_params(fixture_name: str, request) -> None:

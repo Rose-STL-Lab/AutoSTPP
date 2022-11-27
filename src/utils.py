@@ -293,18 +293,18 @@ def project_root() -> str:
     return home_fn
 
 
-def load_config(fn: str = '') -> Dict[str, Any]:
+def load_config(caller_fn: str = '') -> Dict[str, Any]:
     """
     Load the config yaml file (in `configs` folder) for the corresponding model.
 
-    :param fn: name of the config yaml file (without postfix) to load, default to the caller file name
+    :param caller_fn: name of the config yaml file (without postfix) to load, default to the caller file name
     :return: dictionary with config entries
     """
-    if fn == '':  # No filename given
-        fn = inspect.stack()[1].filename  # Absolute path
-    fn = os.path.basename(fn).split('.')[0]
+    if caller_fn == '':  # No filename given
+        caller_fn = inspect.stack()[1].filename  # Absolute path
+    caller_fn = os.path.basename(caller_fn).split('.')[0]
     home_fn = project_root()
-    with open(f'{home_fn}/configs/{fn}.yaml', "r") as stream:
+    with open(f'{home_fn}/configs/{caller_fn}.yaml', "r") as stream:
         try:
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:
@@ -388,6 +388,20 @@ def arange(N: int, bound, lib: Any = np):
     if bound is not None:
         X = scale(X, bound)
     return X
+
+
+def importer() -> str:
+    """
+    Get the import filename of the current module
+    """
+    flag = False
+    for frame in inspect.stack():
+        if 'importlib' in frame.filename:
+            flag = True
+        elif flag:
+            return frame.filename
+    logger.error("Unable to find importer filename")
+    raise FileNotFoundError
 
 
 if __name__ == '__main__':

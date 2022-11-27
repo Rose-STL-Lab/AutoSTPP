@@ -95,3 +95,7 @@ logs/
 
 *.pkl
 *.html
+
+kube/
+id_rsa*
+*.bck

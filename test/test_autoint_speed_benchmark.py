@@ -1,13 +1,12 @@
 from typing import Dict, List
 
 import pytest
-from conftest import relpath, update_params
+from conftest import relpath, update_params, get_params
 
 import numpy as np
 import torch
 import plotly.graph_objects as go
 
-# noinspection PyUnresolvedReferences
 from autoint_mlp import model
 from integration.autoint import BaselineSequential, MixSequential
 from copy import deepcopy
@@ -52,7 +51,7 @@ def adapt_model(model: MixSequential, model_type: str) -> torch.nn.Module:
 
 @pytest.fixture(
     scope="class",
-    params=pytest.params['benchmark']
+    params=get_params('benchmark')
 )
 def benchmark(model, device, request):
     import torch
@@ -80,14 +79,14 @@ def benchmark(model, device, request):
 
     time_elapsed = {}
 
-    for model_type in pytest.config['model_types']:
+    for model_type in pytest.config[__file__]['model_types']:
         model_ = adapt_model(model, model_type)
         time_elapsed[model_type] = []
-        for order in pytest.config['orders']:
+        for order in pytest.config[__file__]['orders']:
             time_meter = AverageMeter()
-            for _ in range(pytest.config['n_repeat']):
+            for _ in range(pytest.config[__file__]['n_repeat']):
                 optimizer = torch.optim.Adam(model_.parameters(), lr=5e-3)
-                x = torch.rand(64, pytest.config['model']['inp_dim']).to(device)
+                x = torch.rand(64, pytest.config[__file__]['model']['inp_dim']).to(device)
 
                 optimizer.zero_grad()
                 a = datetime.datetime.now()
@@ -132,7 +131,7 @@ class TestClass:
         full_fig = go.Figure()  # Full comparison fig
 
         # Add baseline trace
-        x = pytest.config['orders']
+        x = pytest.config[__file__]['orders']
         y = benchmark['baseline']
         baseline_trace = go.Scatter(x=x, y=y, mode='lines', name='baseline')
         fig.add_trace(baseline_trace)
@@ -200,7 +199,7 @@ class TestClass:
         full_fig = go.Figure()  # Full comparison fig
 
         # Add baseline trace
-        x = pytest.config['orders']
+        x = pytest.config[__file__]['orders']
         y = benchmark['baseline']
         baseline_trace = go.Scatter(x=x, y=np.log(y), mode='lines', name='baseline')
         fig.add_trace(baseline_trace)
@@ -268,7 +267,7 @@ class TestClass:
         full_fig = go.Figure()  # Full comparison fig
 
         # Add baseline trace
-        x = pytest.config['orders']
+        x = pytest.config[__file__]['orders']
         y_baseline = benchmark['baseline']
         baseline_trace = go.Bar(x=x, y=np.ones_like(x), name='baseline', opacity=0.9)
         fig.add_trace(baseline_trace)

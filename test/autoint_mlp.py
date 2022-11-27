@@ -1,12 +1,13 @@
 import pytest
-from conftest import update_params
+from conftest import update_params, get_params
+from utils import importer
 
 params = {}
 
 
 @pytest.fixture(
     scope="class",
-    params=pytest.params['model']
+    params=get_params('model', importer())  # The importer file name 
 )
 def model(device, request):
     from torch import nn

@@ -1,8 +1,7 @@
 import pytest
 
-# noinspection PyUnresolvedReferences
 from autoint_mlp import model
-from conftest import relpath, update_params
+from conftest import relpath, update_params, get_params
 
 Xa = 0.
 Xb = 6.
@@ -16,7 +15,7 @@ def log(model, dataloader):
 
 @pytest.fixture(
     scope="module",
-    params=pytest.params['dataloader']
+    params=get_params('dataloader')
 )
 def dataloader(device, request):
     import numpy as np
@@ -34,7 +33,7 @@ def dataloader(device, request):
 
 @pytest.fixture(
     scope="class",
-    params=pytest.params['trained_model']
+    params=get_params('trained_model')
 )
 def trained_model(model, dataloader, device, request):
     import torch
@@ -128,6 +127,7 @@ class TestClass:
     def test_f(self, trained_model, device):
         import torch
         import numpy as np
+        from loguru import logger
 
         trained_model.eval()
 
@@ -139,11 +139,13 @@ class TestClass:
         self.plot(x, f_gt, f_pd, r"$f(x) \text{ after fitting } f'''(x)$", "original_f")
 
         diff = abs(f_pd - f_gt)
+        logger.error(np.mean(diff))
         assert np.mean(diff) < 0.05  # Assert the error is smaller than .05
 
     def test_1st_derivative(self, trained_model, device):
         import torch
         import numpy as np
+        from loguru import logger
 
         trained_model.eval()
 
@@ -155,11 +157,13 @@ class TestClass:
         self.plot(x, f_gt, f_pd, r"$f'(x) \text{ after fitting } f'''(x)$", "1st_derivative")
 
         diff = abs(f_pd - f_gt)
+        logger.error(np.mean(diff))
         assert np.mean(diff) < 0.05  # Assert the error is smaller than .05
 
     def test_2nd_derivative(self, trained_model, device):
         import torch
         import numpy as np
+        from loguru import logger
 
         trained_model.eval()
 
@@ -171,4 +175,5 @@ class TestClass:
         self.plot(x, f_gt, f_pd, r"$f''(x) \text{ after fitting } f'''(x)$", "2nd_derivative")
 
         diff = abs(f_pd - f_gt)
+        logger.error(np.mean(diff))
         assert np.mean(diff) < 0.05  # Assert the error is smaller than .05

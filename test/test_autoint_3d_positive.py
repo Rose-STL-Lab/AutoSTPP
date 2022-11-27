@@ -1,8 +1,7 @@
 import pytest
 
-# noinspection PyUnresolvedReferences
 from autoint_mlp import model
-from conftest import relpath, update_params, log_config
+from conftest import get_params, relpath, update_params, log_config, put_result
 
 Xa = 0.
 Xb = 3.
@@ -25,20 +24,20 @@ def cuboid(device, model):
     from integration.autoint import Cuboid
     from integration.autoint import ReQU, ReQUFlip, Sine, SineFlip
 
-    L = model
-    M = deepcopy(model)
-    for i, layer in enumerate(L.layers):  # Flip all activation function in M
+    M = model
+    L = deepcopy(model)
+    for i, layer in enumerate(M.layers):  # Flip all activation function in M
         if type(layer) == ReQU:
-            M.layers[i] = ReQUFlip()
+            L.layers[i] = ReQUFlip()
         if type(layer) == Sine:
-            M.layers[i] = SineFlip()
+            L.layers[i] = SineFlip()
 
     return Cuboid(L, M)
 
 
 @pytest.fixture(
     scope="module",
-    params=pytest.params['dataloader']
+    params=get_params('dataloader')
 )
 def dataset(device, request):
     import os
@@ -61,7 +60,7 @@ def dataset(device, request):
 
 @pytest.fixture(
     scope="module",
-    params=pytest.params['dataloader']
+    params=get_params('dataloader')
 )
 def dataloader(dataset, request):
     from torch.utils.data import DataLoader
@@ -116,12 +115,13 @@ def gradient_mse_loss():
 
 @pytest.fixture(
     scope="class",
-    params=pytest.params['trained_model']
+    params=get_params('trained_model')
 )
 def trained_model(cuboid, dataloader, device, request):
     import torch
     from loguru import logger
     import os
+    import datetime
 
     model = cuboid
     update_params('trained_model', request)
@@ -137,6 +137,7 @@ def trained_model(cuboid, dataloader, device, request):
         else:
             logger.info('Previous model not found. Retraining...')
 
+    a = datetime.datetime.now()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
     epoch = 0
@@ -163,10 +164,15 @@ def trained_model(cuboid, dataloader, device, request):
 
         avg_loss = sum(current_loss) / len(current_loss)
         losses.append(avg_loss)
-        if len(losses) > 200 and min(losses[:-100]) <= min(losses[-100:]):  # No improvement for 100 epochs
+        if len(losses) > 200 and min(losses[:-100]) - 1e-5 < min(losses[-100:]):  # No improvement for 100 epochs
             break
         logger.debug(f'Epoch {epoch} \t Loss: {avg_loss:.6f}')
         scheduler.step()
+
+    b = datetime.datetime.now()
+    put_result('train_time_per_epoch', (b - a).total_seconds() / epoch)
+    put_result('n_epoch', epoch)
+    put_result('ending_loss', loss.item())
 
     model.eval()
 
@@ -193,7 +199,7 @@ class TestClass:
         t_range = np.arange(Za, Zb + (Zb - Za) / N, (Zb - Za) / N)
 
         fig = plot_lambst_interactive([f_gt, f_pd], x_range, y_range, t_range, show=False,
-                                      master_title = title, subplot_titles = ['Ground Truth', 'Predicted'])
+                                      master_title=title, subplot_titles=['Ground Truth', 'Predicted'])
         fig.write_html(f"{relpath('figs', True)}/{file_name}.html")
 
     @pytest.mark.skip(reason="No visualization")
@@ -208,7 +214,6 @@ class TestClass:
         from loguru import logger
 
         X = dataset.X
-        trained_model.eval()
         F_gt = dataset.F.cpu().detach().numpy()
         F_pd = trained_model.int_lamb(torch.ones_like(X[:, 0]) * torch.tensor(Xa), X[:, 0],
                                       torch.ones_like(X[:, 1]) * torch.tensor(Ya), X[:, 1],
@@ -235,10 +240,9 @@ class TestClass:
 
         N = 50
         X = arange(N, [[Xa, Xb], [Ya, Yb], [Za, Zb]])
-        trained_model.eval()
 
         F_gt_fn = relpath_under('data') + '/F_gt.pkl'
-        if not pytest.config['dataloader']['regenerate'] and os.path.exists(F_gt_fn):  # Loading
+        if not pytest.config[__file__]['dataloader']['regenerate'] and os.path.exists(F_gt_fn):  # Loading
             F_gt = torch.load(F_gt_fn)
         else:
             F_gt = torch.tensor([tplquad(func_to_fit, Xa, x[0],
@@ -258,6 +262,7 @@ class TestClass:
 
         F_pd = np.concatenate(F_pd)
         logger.error(abs(F_gt - F_pd).mean())
+        put_result('integral_test_MSE', abs(F_gt - F_pd).mean())
 
         title = f'Learned integral by training with {pytest.fn_params["trained_model"]["loss_func"]}'
         self.plot(N, F_gt, F_pd, title, 'integral')
@@ -277,7 +282,6 @@ class TestClass:
 
         N = 50
         X = arange(N, [[Xa, Xb], [Ya, Yb], [Za, Zb]])
-        trained_model.eval()
 
         f_gt = func_to_fit(X[:, 0], X[:, 1], X[:, 2])
         X_loader = DataLoader(torch.Tensor(X).to(device), shuffle=False, batch_size=4096)
@@ -288,6 +292,7 @@ class TestClass:
         f_pd = np.concatenate(f_pd)
 
         logger.error(abs(f_gt - f_pd).mean())
+        put_result('integrant_test_MSE', abs(f_gt - f_pd).mean())
 
         title = f'Learned integrant by training with {pytest.fn_params["trained_model"]["loss_func"]}'
         self.plot(N, f_gt, f_pd, title, 'integrant')
