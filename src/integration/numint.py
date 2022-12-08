@@ -1,20 +1,20 @@
 import torch
 from torch import nn
 
-from cheb import chebyCoef, chebyInt
-from taylor import TaylorInt
+from integration.cheb import chebyCoef, chebyInt
+from integration.taylor import TaylorInt
 
 eps = 1e-10
 
 
 class MonteCarloSameInfluenceProcess(nn.Module):
     
-    '''
-    hidden_size: the dimension of linear hidden layer
-    t_end: the time when observation terminates
-           if is None, then time after last event is not considered
-    '''
     def __init__(self, hidden_size, t_end, device):
+        """
+        :param hidden_size: the dimension of linear hidden layer
+        :param t_end: the time when observation terminates
+                      if is None, then time after last event is not considered
+        """
         super().__init__()
         self.hidden_size = hidden_size
         self.t_end = t_end
@@ -35,18 +35,14 @@ class MonteCarloSameInfluenceProcess(nn.Module):
             nn.Softplus()
         )
                     
-                
-    '''
-    Calculate NLL for a batch of sequence
-    
-    ARGS
-    seq_pads: [batch, maxlen, 1], the padded event timings
-    seq_lens: [batch], the sequence length before padding
-    
-    RETURN
-    nll: scalar, the average negative log likelihood
-    '''
-    def forward(self, seq_pads, seq_lens):
+    def forward(self, seq_pads, seq_lens):         
+        """
+        Calculate NLL for a batch of sequence
+        
+        :param seq_pads: [batch, maxlen, 1], the padded event timings
+        :param seq_lens: [batch], the sequence length before padding
+        :return nll: scalar, the average negative log likelihood
+        """
         batch, maxlen, _ = seq_pads.shape
         t_last = torch.gather(seq_pads, 1, torch.tensor(seq_lens).to(self.device).view(-1, 1, 1) - 1).squeeze()
         
@@ -63,8 +59,8 @@ class MonteCarloSameInfluenceProcess(nn.Module):
         lambs = self.f(diff_pads).squeeze(-1)
         lambs = lambs.split(list(range(1, maxlen)), dim=-1)
         lambs = torch.stack([lamb.sum(dim=-1) for lamb in lambs], -1)
-        lambs = torch.cat((torch.zeros(batch, 1).to(self.device), lambs), -1) # first event zero influence
-        lambs += self.background # add background intensity
+        lambs = torch.cat((torch.zeros(batch, 1).to(self.device), lambs), -1)  # First event zero influence
+        lambs += self.background  # Add background intensity
         
         ######### Calculate integral intensity ##########
         # [batch, seq_len]
@@ -72,7 +68,7 @@ class MonteCarloSameInfluenceProcess(nn.Module):
         diff_pads_with_last = []
         for seq_pad, seq_len in zip(seq_pads, seq_lens):
             if self.t_end is None:
-                t_end = seq_pad[seq_len-1]
+                t_end = seq_pad[seq_len - 1]
             else:
                 t_end = self.t_end
             temp = t_end - seq_pad[:seq_len]
@@ -81,13 +77,13 @@ class MonteCarloSameInfluenceProcess(nn.Module):
         diff_pads_with_last = torch.stack(diff_pads_with_last)
         
         lamb_int_samples = []
-        #diff = np.infty
+        # diff = np.infty
         
+        # while diff > 2.0: # Estimate with precision 2.0
         for _ in range(15):
-        #while diff > 2.0: # Estimate with precision 2.0
-            rand_time = torch.rand_like(diff_pads_with_last) * diff_pads_with_last # random time
+            rand_time = torch.rand_like(diff_pads_with_last) * diff_pads_with_last  # Random time
             lamb_sample = self.f(rand_time) + eps
-            lamb_int_sample = lamb_sample * diff_pads_with_last # f(x_bar) * V
+            lamb_int_sample = lamb_sample * diff_pads_with_last  # f(x_bar) * V
             lamb_int_samples.append(lamb_int_sample)
             '''
             diff = 0.0
@@ -115,7 +111,7 @@ class MonteCarloSameInfluenceProcess(nn.Module):
             background_int = t_last * self.background
         else:
             background_int = self.t_end * self.background
-        lamb_ints += background_int # Add background integral
+        lamb_ints += background_int  # Add background integral
         
         nll = - (sum(sum_log_lambs) - sum(lamb_ints)) / batch
         
@@ -124,12 +120,12 @@ class MonteCarloSameInfluenceProcess(nn.Module):
 
 class ChebyshevSameInfluenceProcess(nn.Module):
     
-    '''
-    hidden_size: the dimension of linear hidden layer
-    t_end: the time when observation terminates
-           if is None, then time after last event is not considered
-    '''
     def __init__(self, hidden_size, t_end, device):
+        """
+        :param hidden_size: the dimension of linear hidden layer
+        :param t_end: the time when observation terminates
+                      if is None, then time after last event is not considered
+        """
         super().__init__()
         self.hidden_size = hidden_size
         self.t_end = t_end
@@ -149,19 +145,15 @@ class ChebyshevSameInfluenceProcess(nn.Module):
             nn.Linear(hidden_size, 1),
             nn.Softplus()
         )
-                    
-                
-    '''
-    Calculate NLL for a batch of sequence
-    
-    ARGS
-    seq_pads: [batch, maxlen, 1], the padded event timings
-    seq_lens: [batch], the sequence length before padding
-    
-    RETURN
-    nll: scalar, the average negative log likelihood
-    '''
-    def forward(self, seq_pads, seq_lens):
+        
+    def forward(self, seq_pads, seq_lens): 
+        """
+        Calculate NLL for a batch of sequence
+        
+        :param seq_pads: [batch, maxlen, 1], the padded event timings
+        :param seq_lens: [batch], the sequence length before padding
+        :return nll: scalar, the average negative log likelihood
+        """
         batch, maxlen, _ = seq_pads.shape
         t_last = torch.gather(seq_pads, 1, torch.tensor(seq_lens).to(self.device).view(-1, 1, 1) - 1).squeeze()
         
@@ -178,9 +170,8 @@ class ChebyshevSameInfluenceProcess(nn.Module):
         lambs = self.f(diff_pads).squeeze(-1)
         lambs = lambs.split(list(range(1, maxlen)), dim=-1)
         lambs = torch.stack([lamb.sum(dim=-1) for lamb in lambs], -1)
-        lambs = torch.cat((torch.zeros(batch, 1).to(self.device), lambs), -1) # first event zero influence
-        lambs += self.background # add background intensity
-        
+        lambs = torch.cat((torch.zeros(batch, 1).to(self.device), lambs), -1)  # First event zero influence
+        lambs += self.background  # Add background intensity
         
         ######### Calculate integral range ##########
         # [batch, seq_len]
@@ -188,7 +179,7 @@ class ChebyshevSameInfluenceProcess(nn.Module):
         diff_pads_with_last = []
         for seq_pad, seq_len in zip(seq_pads, seq_lens):
             if self.t_end is None:
-                t_end = seq_pad[seq_len-1]
+                t_end = seq_pad[seq_len - 1]
             else:
                 t_end = self.t_end
             temp = t_end - seq_pad[:seq_len]
@@ -196,11 +187,10 @@ class ChebyshevSameInfluenceProcess(nn.Module):
             diff_pads_with_last.append(temp)
         diff_pads_with_last = torch.stack(diff_pads_with_last)
         
-        
         ######### Apply chebyshev integration ##########
         def f(x):
             if x.shape[-1] != 1:
-                x = x.unsqueeze(-1) # Add one dimension
+                x = x.unsqueeze(-1)  # Add one dimension
             return self.f(x).squeeze()
             
         coefs = chebyCoef(f, 1000, self.t_end, 0.0)
@@ -218,7 +208,7 @@ class ChebyshevSameInfluenceProcess(nn.Module):
             background_int = t_last * self.background
         else:
             background_int = self.t_end * self.background
-        lamb_ints += background_int # Add background integral
+        lamb_ints += background_int  # Add background integral
         
         nll = - (sum(sum_log_lambs) - sum(lamb_ints)) / batch
         
@@ -228,9 +218,9 @@ class ChebyshevSameInfluenceProcess(nn.Module):
 class TaylorSameInfluenceProcess(nn.Module):
     
     '''
-    hidden_size: the dimension of linear hidden layer
-    t_end: the time when observation terminates
-           if is None, then time after last event is not considered
+    :param hidden_size: the dimension of linear hidden layer
+    :param t_end: the time when observation terminates
+                  if is None, then time after last event is not considered
     '''
     def __init__(self, hidden_size, t_end, device):
         super().__init__()
@@ -255,19 +245,15 @@ class TaylorSameInfluenceProcess(nn.Module):
         
         # Taylor integral utility  
         self.tint = TaylorInt(0.0, t_end, 0.05, device).to(device)
-                    
-                
-    '''
-    Calculate NLL for a batch of sequence
-    
-    ARGS
-    seq_pads: [batch, maxlen, 1], the padded event timings
-    seq_lens: [batch], the sequence length before padding
-    
-    RETURN
-    nll: scalar, the average negative log likelihood
-    '''
-    def forward(self, seq_pads, seq_lens):
+             
+    def forward(self, seq_pads, seq_lens):               
+        """
+        Calculate NLL for a batch of sequence
+        
+        :param seq_pads: [batch, maxlen, 1], the padded event timings
+        :param seq_lens: [batch], the sequence length before padding
+        :return nll: scalar, the average negative log likelihood
+        """
         batch, maxlen, _ = seq_pads.shape
         t_last = torch.gather(seq_pads, 1, torch.tensor(seq_lens).to(self.device).view(-1, 1, 1) - 1).squeeze()
         
@@ -284,29 +270,27 @@ class TaylorSameInfluenceProcess(nn.Module):
         lambs = self.f(diff_pads).squeeze(-1)
         lambs = lambs.split(list(range(1, maxlen)), dim=-1)
         lambs = torch.stack([lamb.sum(dim=-1) for lamb in lambs], -1)
-        lambs = torch.cat((torch.zeros(batch, 1).to(self.device), lambs), -1) # first event zero influence
-        lambs += self.background # add background intensity
-        
-        
+        lambs = torch.cat((torch.zeros(batch, 1).to(self.device), lambs), -1)  # First event zero influence
+        lambs += self.background  # Add background intensity
+         
         ######### Calculate integral range ##########
         # [batch, seq_len]
         # cumulative influence of every event
         diff_pads_with_last = []
         for seq_pad, seq_len in zip(seq_pads, seq_lens):
             if self.t_end is None:
-                t_end = seq_pad[seq_len-1]
+                t_end = seq_pad[seq_len - 1]
             else:
                 t_end = self.t_end
             temp = t_end - seq_pad[:seq_len]
             temp = torch.cat((temp, torch.zeros(maxlen - seq_len, 1).to(self.device)))
             diff_pads_with_last.append(temp)
         diff_pads_with_last = torch.stack(diff_pads_with_last)
-        
-        
+          
         ######### Apply taylor integration ##########
         def f(x):
             if x.shape[-1] != 1:
-                x = x.unsqueeze(-1) # Add one dimension
+                x = x.unsqueeze(-1)  # Add one dimension
             return self.f(x).squeeze()
         
         x = diff_pads_with_last.view(-1)
@@ -323,7 +307,7 @@ class TaylorSameInfluenceProcess(nn.Module):
             background_int = t_last * self.background
         else:
             background_int = self.t_end * self.background
-        lamb_ints += background_int # Add background integral
+        lamb_ints += background_int  # Add background integral
         
         nll = - (sum(sum_log_lambs) - sum(lamb_ints)) / batch
         

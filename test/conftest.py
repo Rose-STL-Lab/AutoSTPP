@@ -53,8 +53,9 @@ def pytest_configure():
     import sys
 
     # NOTICE: test config should always be dictionary of lists
+    logger.info(sys.argv)
     fn = sys.argv[-1]  # Current test file name
-    fn = fn.split('.')[0]
+    fn = fn[:fn.rindex('.py')]
     pytest.fn = fn
     pytest.fn_params = {}  # Parameters that need to be in the filename
     pytest.config = {}  # Configs for different test files

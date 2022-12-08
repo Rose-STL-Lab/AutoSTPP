@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, Any, List
 
-from tqdm.auto import tqdm as tqdm_, trange as trange_
+from tqdm import tqdm as tqdm_, trange as trange_
 from tqdm.contrib import tenumerate as tenumerate_
 from loguru import logger
 
@@ -24,6 +24,8 @@ import os
 import dotenv
 
 import itertools
+import functools
+import warnings
 
 eps = 1e-10
 STEP = 1e-3
@@ -41,6 +43,7 @@ trange = lambda *argv: trange_(*argv, position=0, leave=True, ncols=100)
 tenumerate = lambda *argv: tenumerate_(*argv, position=0, leave=True, ncols=100)
 
 default_fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
+deprecated_func_names = []
 
 
 class AverageMeter(object):
@@ -189,6 +192,17 @@ def loglike(his_t, y):
 def evaluate(lamb_func, predict, model, seqs):
     """
     Calculate λ MAPE and log likelihood w.r.t. a dataset
+    
+    :param lamb_func: _description_
+    :param predict: a function of the form 
+        <quote>    
+        Compute model intensities at different time
+        :param his_t: np array [seqlen,], the event time history
+        :param x: np array [N,], a batch of times
+        </quote>
+    :param model: _description_
+    :param seqs: _description_
+    :return: the mean of MAPE and LL
     """
     lls = []
     mapes = []
@@ -206,13 +220,13 @@ def evaluate(lamb_func, predict, model, seqs):
     return sum(mapes) / len(mapes), sum(lls) / len(lls)
 
 
-def plot_predict_intensity(lamb_func, predict, model, his_t, color='blue'):
+def plot_predict_intensity(lamb_func, predict, model, his_t, color='blue', t_end=t_end):
     """
     Plot λt vs. time
     """
     width, _ = plt.figaspect(.1)
-    _, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(width, width / 3),
-                                 gridspec_kw={'height_ratios': [5, 1]})
+    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(width, width / 3),
+                                   gridspec_kw={'height_ratios': [5, 1]})
 
     # Calculate and Plot the intensity
     y = gt(lamb_func, his_t)
@@ -247,6 +261,7 @@ def plot_predict_intensity(lamb_func, predict, model, his_t, color='blue'):
     ax2.stem(x_, y_, use_line_collection=True, label=f'Events')
     ax2.set_xlim([t_start, t_end])
     ax2.invert_yaxis()
+    return fig
 
 
 def nested_stack(tensors):
@@ -324,7 +339,8 @@ def relpath_under(prefix: str, fn: str = None, create_dir: bool = False) -> str:
     """
     if fn is None:
         fn = inspect.stack()[1].filename  # Absolute path of the caller
-    fn = fn.split('.')[0]
+    if '.py' in fn:
+        fn = fn[:fn.rindex('.py')]
     home_fn = project_root()
     relpath = os.path.relpath(fn, home_fn)
     new_path = f'{home_fn}/{prefix}/{relpath}'
@@ -402,6 +418,27 @@ def importer() -> str:
             return frame.filename
     logger.error("Unable to find importer filename")
     raise FileNotFoundError
+
+
+def deprecated(func):
+    """
+    This is a decorator which can be used to mark functions
+    as deprecated. It will result in a warning being emitted
+    when the function is used.
+    """
+    @functools.wraps(func)
+    def new_func(*args, **kwargs):
+        global deprecated_func_names
+        if func.__name__ not in deprecated_func_names:
+            deprecated_func_names.append(func.__name__)
+            warnings.simplefilter('always', DeprecationWarning)  # turn off filter
+            warnings.warn("Call to deprecated function {}.".format(func.__name__),
+                          category=DeprecationWarning,
+                          stacklevel=2)
+            warnings.simplefilter('default', DeprecationWarning)  # reset filter
+        return func(*args, **kwargs)
+        
+    return new_func
 
 
 if __name__ == '__main__':

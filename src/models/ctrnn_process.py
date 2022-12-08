@@ -3,17 +3,18 @@ import numpy as np
 import torch
 from torch import nn
 
-from ctrnn import CTGRU, CTLSTM
+from models.ctrnn import CTGRU, CTLSTM
 
 eps = 1e-10
 
+
 class GRUNeuralHawkesProcess(nn.Module):
     
-    '''
-    hidden_size: the dimension of hidden representation and linear hidden layer
-    t_end: the time when observation terminates
-    '''
-    def __init__(self, hidden_size, t_end, device, deepf=False):
+    def __init__(self, hidden_size, t_end, device, deepf=False):   
+        """
+        :param hidden_size: the dimension of hidden representation and linear hidden layer
+        :param t_end: the time when observation terminates
+        """
         super().__init__()
         self.hidden_size = hidden_size
         self.t_end = t_end
@@ -38,29 +39,25 @@ class GRUNeuralHawkesProcess(nn.Module):
                 nn.Softplus()
             )
         
-                
-    '''
-    Encode a batch of sequences to hidden states, including h0 (all zeros)
-    
-    ARGS
-    seq_pads: [batch, maxlen, 1], the padded event timings
-    seq_lens: [batch], the sequence length before padding
-    
-    RETURN
-    befores: [num_hidden, batch, maxlen+1, hiddim], the representation before each event
-    afters:  [num_hidden, batch, maxlen+1, hiddim], the representation after each event
-    delta_t_pads: [batch, maxlen(+1), 1]] the padded event timing differences, 
-                  include before the first event and after last event
-    '''
-    def forward(self, seq_pads, seq_lens):
+    def forward(self, seq_pads, seq_lens):     
+        """
+        Encode a batch of sequences to hidden states, including h0 (all zeros)
+        
+        :param seq_pads: [batch, maxlen, 1], the padded event timings
+        :param seq_lens: [batch], the sequence length before padding
+        :return befores: [num_hidden, batch, maxlen+1, hiddim], the representation before each event
+        :return afters:  [num_hidden, batch, maxlen+1, hiddim], the representation after each event
+        :return delta_t_pads: [batch, maxlen(+1), 1]] the padded event timing differences, 
+                              include before the first event and after last event
+        """
         # Compute the last event timings
         t_last = torch.gather(seq_pads, 1, torch.tensor(seq_lens).to(self.device).view(-1, 1, 1) - 1).squeeze(-1)
         
         # Convert absolute timing to timing difference
         delta_t_pads = - torch.ones_like(seq_pads)
         for i, seq_len in enumerate(seq_lens):
-            delta_t_pads[i, 0] = seq_pads[i, 0] # retain first event timing
-            delta_t_pads[i, 1:seq_len] = seq_pads[i, 1:seq_len] - seq_pads[i, :seq_len-1]
+            delta_t_pads[i, 0] = seq_pads[i, 0]  # Retain first event timing
+            delta_t_pads[i, 1:seq_len] = seq_pads[i, 1:seq_len] - seq_pads[i, :seq_len - 1]
         
         # Extend delta_t_pads to include after last event
         delta_t_pads = torch.cat([delta_t_pads, - torch.ones(len(seq_lens), 1, 1).to(self.device)], 1)
@@ -73,22 +70,18 @@ class GRUNeuralHawkesProcess(nn.Module):
         
         return befores, afters, delta_t_pads
     
-    
-    '''
-    Utility for preparing the input to λ at certain time points
-    
-    ARGS
-    times: [batch, N, 1], the time points to evaluate intensity
-    seq_pads: [batch, maxlen, 1], the padded event timings
-    afters: [num_hidden, batch, maxlen+1, hiddim], the representation after each event
-    
-    RETURN
-    inp: [batch, N, hiddim], the [t, h] input at the time points 
-    '''
-    def h(self, times, seq_pads, afters):
-        temp = torch.sum(times.transpose(2, 1) <= seq_pads, 1) # find reverse index
+    def h(self, times, seq_pads, afters):   
+        """
+        Utility for preparing the input to λ at certain time points
+        
+        :param times: [batch, N, 1], the time points to evaluate intensity
+        :param seq_pads: [batch, maxlen, 1], the padded event timings
+        :param afters: [num_hidden, batch, maxlen+1, hiddim], the representation after each event
+        :return inp: [batch, N, hiddim], the [t, h] input at the time points 
+        """
+        temp = torch.sum(times.transpose(2, 1) <= seq_pads, 1)  # Find reverse index
         idx_max, _ = torch.max(temp, 1)
-        idxs = idx_max.unsqueeze(-1) - temp # number of event before each time
+        idxs = idx_max.unsqueeze(-1) - temp  # Number of event before each time
         afters = afters.permute(1, 0, 2, 3)
         h_select = torch.stack([torch.index_select(h, 1, idx) for h, idx in zip(afters, idxs)]).permute(1, 0, 2, 3)
         temp = torch.cat([torch.zeros(len(seq_pads), 1, 1).to(seq_pads.device), seq_pads], 1)
@@ -97,36 +90,31 @@ class GRUNeuralHawkesProcess(nn.Module):
 
         return torch.sum(h_select * decay_rate, 0)
     
-    
-    '''
-    Calculate NLL for a batch of sequences
-    
-    ARGS
-    befores: [num_hidden, batch, maxlen+1, hiddim], the representation before each event
-    afters:  [num_hidden, batch, maxlen+1, hiddim], the representation after each event
-    delta_t_pads: [batch, maxlen+1, 1]] the padded event timing differences, 
-                  include before the first event and after last event
-    seq_lens: [batch], the sequence length before padding
-    
-    RETURN
-    nll: scalar, the average negative log likelihood
-    '''
     def loss(self, befores, afters, delta_t_pads, seq_lens):
+        """
+        Calculate NLL for a batch of sequences
+        
+        :param befores: [num_hidden, batch, maxlen+1, hiddim], the representation before each event
+        :param afters:  [num_hidden, batch, maxlen+1, hiddim], the representation after each event
+        :param delta_t_pads: [batch, maxlen+1, 1]] the padded event timing differences, 
+                             include before the first event and after last event
+        :param seq_lens: [batch], the sequence length before padding
+        :return nll: scalar, the average negative log likelihood
+        """
         # Calculate intensity before every event
         hidden_sum = torch.sum(befores, dim=0)
         lambs = self.f(hidden_sum[:, :-1]) + eps
             
         # Calculate lambs integral using Monte Carlo
         lamb_int_samples = []
-        diff = np.infty
         
-        for _ in range(30):
         # while diff > 2.0: # Estimate with precision 2.0
-            rand_time = torch.rand_like(delta_t_pads) * delta_t_pads # random time between [0, delta_t]
+        for _ in range(30):
+            rand_time = torch.rand_like(delta_t_pads) * delta_t_pads  # Random time between [0, delta_t]
             decay_rate = (rand_time / self.RNN.scales).permute(2, 0, 1).unsqueeze(-1)
-            hidden_sample = torch.sum(afters * torch.exp(-decay_rate), dim=0) # perform decay
+            hidden_sample = torch.sum(afters * torch.exp(-decay_rate), dim=0)  # Perform decay
             lamb_sample = self.f(hidden_sample) + eps
-            lamb_int_sample = lamb_sample * delta_t_pads # f(x_bar) * V
+            lamb_int_sample = lamb_sample * delta_t_pads  # f(x_bar) * V
             lamb_int_samples.append(lamb_int_sample)
             
             '''
@@ -148,7 +136,7 @@ class GRUNeuralHawkesProcess(nn.Module):
         loglike = []
          
         for lamb_int, lamb, seq_len in zip(lamb_ints, lambs, seq_lens):
-            loglike.append(torch.log(lamb[:seq_len]).sum() - lamb_int[:seq_len+1].sum()) # NLL
+            loglike.append(torch.log(lamb[:seq_len]).sum() - lamb_int[:seq_len + 1].sum())  # NLL
             
         return - sum(loglike) / len(loglike)
 
@@ -160,11 +148,11 @@ class GRUNeuralHawkesProcess(nn.Module):
 
 class LSTMNeuralHawkesProcess(nn.Module):
     
-    '''
-    hidden_size: the dimension of hidden representation and linear hidden layer
-    t_end: the time when observation terminates
-    '''
     def __init__(self, hidden_size, t_end, device, deepf=False):
+        '''
+        :param hidden_size: the dimension of hidden representation and linear hidden layer
+        :param t_end: the time when observation terminates
+        '''
         super().__init__()
         self.hidden_size = hidden_size
         self.t_end = t_end
@@ -189,30 +177,29 @@ class LSTMNeuralHawkesProcess(nn.Module):
                 nn.Softplus()
             )
         
-                
-    '''
-    Encode a batch of sequences to hidden states, including h0 (all zeros)
-    
-    ARGS
-    seq_pads: [batch, maxlen, 1], the padded event timings
-    seq_lens: [batch], the sequence length before padding
-    
-    RETURN
-    befores: [batch, maxlen+1, hiddim], the representation before each event
-    afters:  [batch, maxlen+1, hiddim], the representation after each event
-    delta_t_pads: [batch, maxlen(+1), 1]] the padded event timing differences, 
-                  include before the first event and after last event
-    [cs, cbars, os, decays]: [batch, maxlen+1, hiddim], information for interpolation
-    '''
-    def forward(self, seq_pads, seq_lens):
+    def forward(self, seq_pads, seq_lens): 
+        """
+        Encode a batch of sequences to hidden states, including h0 (all zeros)
+        
+        :param seq_pads: [batch, maxlen, 1], the padded event timings
+        :param seq_lens: [batch], the sequence length before padding
+        :return befores: [batch, maxlen+1, hiddim], the representation before each event
+        :return afters:  [batch, maxlen+1, hiddim], the representation after each event
+        :return delta_t_pads: [batch, maxlen(+1), 1]] the padded event timing differences, 
+                              include before the first event and after last event
+        :return cs: [batch, maxlen+1, hiddim], information for interpolation
+        :return cbars: [batch, maxlen+1, hiddim], information for interpolation
+        :return os: [batch, maxlen+1, hiddim], information for interpolation
+        :return decays: [batch, maxlen+1, hiddim], information for interpolation
+        """
         # Compute the last event timings
         t_last = torch.gather(seq_pads, 1, torch.tensor(seq_lens).to(self.device).view(-1, 1, 1) - 1).squeeze(-1)
         
         # Convert absolute timing to timing difference
         delta_t_pads = - torch.ones_like(seq_pads)
         for i, seq_len in enumerate(seq_lens):
-            delta_t_pads[i, 0] = seq_pads[i, 0] # retain first event timing
-            delta_t_pads[i, 1:seq_len] = seq_pads[i, 1:seq_len] - seq_pads[i, :seq_len-1]
+            delta_t_pads[i, 0] = seq_pads[i, 0]  # Retain first event timing
+            delta_t_pads[i, 1:seq_len] = seq_pads[i, 1:seq_len] - seq_pads[i, :seq_len - 1]
         
         # Extend delta_t_pads to include after last event
         delta_t_pads = torch.cat([delta_t_pads, - torch.ones(len(seq_lens), 1, 1).to(self.device)], 1)
@@ -224,24 +211,23 @@ class LSTMNeuralHawkesProcess(nn.Module):
         
         return befores, afters, delta_t_pads, [cs, cbars, os, decays]
     
-    
-    '''
-    Utility for preparing the input to λ at certain time points
-    
-    ARGS
-    times: [batch, N, 1], the time points to evaluate intensity
-    seq_pads: [batch, maxlen, 1], the padded event timings
-    afters: [batch, maxlen+1, hidden_size], the representation after each event
-    cs, cbars, os, decays: [batch, maxlen+1, hidden_size], info for calculating decay
-    
-    RETURN
-    inp: [batch, N, hiddim], the h input at the time points 
-    '''
     def h(self, times, seq_pads, afters, cs, cbars, os, decays):
-        temp = torch.sum(times.transpose(2, 1) <= seq_pads, 1) # find reverse index
+        """
+        Utility for preparing the input to λ at certain time points
+        
+        :param times: [batch, N, 1], the time points to evaluate intensity
+        :param seq_pads: [batch, maxlen, 1], the padded event timings
+        :param afters: [batch, maxlen+1, hidden_size], the representation after each event
+        :param cs: [batch, maxlen+1, hidden_size], info for calculating decay
+        :param cbars: [batch, maxlen+1, hidden_size], info for calculating decay
+        :param os: [batch, maxlen+1, hidden_size], info for calculating decay
+        :param decays: [batch, maxlen+1, hidden_size], info for calculating decay
+        :return inp: [batch, N, hiddim], the h input at the time points 
+        """
+        temp = torch.sum(times.transpose(2, 1) <= seq_pads, 1)  # Find reverse index
         idx_max, _ = torch.max(temp, 1)
-        idxs = idx_max.unsqueeze(-1) - temp # number of event before each time
-        h_select = torch.stack([torch.index_select(h, 0, idx) for h, idx in zip(afters, idxs)])
+        idxs = idx_max.unsqueeze(-1) - temp  # Number of event before each time
+        # h_select = torch.stack([torch.index_select(h, 0, idx) for h, idx in zip(afters, idxs)])
         temp = torch.cat([torch.zeros(len(seq_pads), 1, 1).to(seq_pads.device), seq_pads], 1)
         t_select = torch.stack([torch.index_select(t, 0, idx) for t, idx in zip(temp, idxs)])
         cs_select = torch.stack([torch.index_select(c, 0, idx) for c, idx in zip(cs, idxs)])
@@ -249,37 +235,36 @@ class LSTMNeuralHawkesProcess(nn.Module):
         os_select = torch.stack([torch.index_select(o, 0, idx) for o, idx in zip(os, idxs)])
         decays_select = torch.stack([torch.index_select(decay, 0, idx) for decay, idx in zip(decays, idxs)])
 
-        return os_select * torch.tanh(cs_bar_select + (cs_select - cs_bar_select) 
-                                      * torch.exp(-(times - t_select) * decays_select))
+        inp = cs_bar_select + (cs_select - cs_bar_select) * torch.exp(-(times - t_select) * decays_select)
+        return os_select * torch.tanh(inp)
     
-    
-    '''
-    Calculate NLL for a batch of sequences
-    
-    ARGS
-    befores: [batch, maxlen+1, hiddim], the representation before each event
-    afters:  [batch, maxlen+1, hiddim], the representation after each event
-    delta_t_pads: [batch, maxlen+1, 1]] the padded event timing differences, 
-                  include before the first event and after last event
-    seq_lens: [batch], the sequence length before padding
-    cs, cbars, os, decays: [batch, maxlen+1, hidden_size], info for calculating decay
-    
-    RETURN
-    nll: scalar, the average negative log likelihood
-    '''
-    def loss(self, befores, afters, delta_t_pads, seq_lens, cs, cbars, os, decays):
+    def loss(self, befores, afters, delta_t_pads, seq_lens, cs, cbars, os, decays):   
+        """
+        Calculate NLL for a batch of sequences
+        
+        :param befores: [batch, maxlen+1, hiddim], the representation before each event
+        :param afters:  [batch, maxlen+1, hiddim], the representation after each event
+        :param delta_t_pads: [batch, maxlen+1, 1]] the padded event timing differences, 
+                             include before the first event and after last event
+        :param seq_lens: [batch], the sequence length before padding
+        :param cs: [batch, maxlen+1, hidden_size], info for calculating decay
+        :param cbars: [batch, maxlen+1, hidden_size], info for calculating decay
+        :param os: [batch, maxlen+1, hidden_size], info for calculating decay
+        :param decays: [batch, maxlen+1, hidden_size], info for calculating decay
+        :return nll: scalar, the average negative log likelihood
+        """
         # Calculate intensity before every event
         lambs = self.f(befores) + eps
             
         # Calculate lambs integral using Monte Carlo
         lamb_int_samples = []
-        diff = np.infty
+        # diff = np.infty
         
-        for _ in range(30): # Estimate with precision 2.0
-            rand_time = torch.rand_like(delta_t_pads) * delta_t_pads # random time between [0, delta_t]
-            hidden_sample = os * torch.tanh(cbars + (cs - cbars) * torch.exp(-rand_time * decays)) # decay
+        for _ in range(30):  # Estimate with precision 2.0
+            rand_time = torch.rand_like(delta_t_pads) * delta_t_pads  # Random time between [0, delta_t]
+            hidden_sample = os * torch.tanh(cbars + (cs - cbars) * torch.exp(-rand_time * decays))  # Decay
             lamb_sample = self.f(hidden_sample) + eps
-            lamb_int_sample = lamb_sample * delta_t_pads # f(x_bar) * V
+            lamb_int_sample = lamb_sample * delta_t_pads  # f(x_bar) * V
             lamb_int_samples.append(lamb_int_sample)
             '''
             diff = 0.0
@@ -300,7 +285,7 @@ class LSTMNeuralHawkesProcess(nn.Module):
         loglike = []
         
         for lamb_int, lamb, seq_len in zip(lamb_ints, lambs, seq_lens):
-            loglike.append(torch.log(lamb[:seq_len]).sum() - lamb_int[:seq_len+1].sum()) # NLL
+            loglike.append(torch.log(lamb[:seq_len]).sum() - lamb_int[:seq_len + 1].sum())  # NLL
             
         return - sum(loglike) / len(loglike)
 

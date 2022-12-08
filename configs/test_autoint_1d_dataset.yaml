@@ -1,0 +1,11 @@
+dataloader:
+  #  ['covidNJ', 'earthquakesJP', 'shakyHawkes', 'delayPeak', 'shiftHawkes']
+  # name: ['covidNJ', 'earthquakesJP']
+  name: ['earthquakesJP']
+trained_model:
+  name: ['autoint', 'autoint-gru', 'neural-hawkes', 'rmtpp', 'transformer-hawkes', 'fully', 'ct-gru', 'chebyshev', 'monte-carlo', 'taylor']
+  # name: ['autoint-gru']
+  hidden_size: [32]
+  lr: 0.01 
+  n_epoch: 100
+  retrain: false

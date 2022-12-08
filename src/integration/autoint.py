@@ -9,7 +9,7 @@ from typeguard import typechecked
 from torch import nn, autograd
 from torch.nn import functional as F
 
-from src.utils import nested_stack
+from utils import nested_stack, deprecated
 
 patch_typeguard()
 batch = None  # Suppress PyCharm type warning
@@ -207,6 +207,40 @@ class MultSequential(nn.Sequential):
             self.f.append(inp)
 
         return self.f[-1]
+    
+    @deprecated
+    def dforward(self, x, dim):
+        """
+        Calculate 1st derivative
+
+        :param x: (..., dim)
+        :param dim: the dimension to derive
+        :raises NotImplementedError: if activation derivative does not exist
+        :return: (..., dim)
+        """
+        assert type(dim) == int
+        key = str(dim)
+        
+        _ = self.forward(x)
+        base = torch.zeros_like(x)
+        base[..., dim] = 1
+        self.dnf[key] = pd = [base, ]
+            
+        # Perform chain rule: df(g(x))/dx = f'(g(x)) g'(x)
+        for i, module in enumerate(self):
+            tp = type(module).__name__
+            if tp == 'Linear':
+                pd.append(pd[-1] @ module.weight.T)
+            elif tp == 'NonNegLinear':
+                pd.append(pd[-1] @ nn.functional.relu(module.weight).T)
+            elif tp == 'PadLinear':
+                pd.append(pd[-1] @ module.padded_weight().T)
+            elif tp in self.acDict: 
+                pd.append(self.acDict[tp][0](self.f[i + 1], self.f[i]) * pd[-1])
+            else:
+                raise NotImplementedError
+        
+        return pd[-1]
 
     def dnforward(self, x, dims):
         """
