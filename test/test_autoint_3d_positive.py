@@ -1,6 +1,6 @@
 import pytest
 
-from autoint_mlp import model
+from autoint_mlp import model, cuboid
 from conftest import get_params, relpath, update_params, log_config, put_result
 
 Xa = 0.
@@ -14,25 +14,6 @@ Zb = 3.
 def func_to_fit(x, y, z):
     import numpy as np
     return np.sin(x) * np.cos(y) * np.sin(z) + 1
-
-
-@pytest.fixture(
-    scope="class"
-)
-def cuboid(device, model):
-    from copy import deepcopy
-    from integration.autoint import Cuboid
-    from integration.autoint import ReQU, ReQUFlip, Sine, SineFlip
-
-    M = model
-    L = deepcopy(model)
-    for i, layer in enumerate(M.layers):  # Flip all activation function in M
-        if type(layer) == ReQU:
-            L.layers[i] = ReQUFlip()
-        if type(layer) == Sine:
-            L.layers[i] = SineFlip()
-
-    return Cuboid(L, M)
 
 
 @pytest.fixture(

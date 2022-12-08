@@ -36,3 +36,22 @@ def model(device, request):
     layers.append(nn.Linear(request.param['hid_dim'], request.param['out_dim']))
 
     return MixSequential(*layers).to(device)
+
+
+@pytest.fixture(
+    scope="class"
+)
+def cuboid(device, model):
+    from copy import deepcopy
+    from integration.autoint import Cuboid
+    from integration.autoint import ReQU, ReQUFlip, Sine, SineFlip
+
+    M = model
+    L = deepcopy(model)
+    for i, layer in enumerate(M.layers):  # Flip all activation function in M
+        if type(layer) == ReQU:
+            L.layers[i] = ReQUFlip()
+        if type(layer) == Sine:
+            L.layers[i] = SineFlip()
+
+    return Cuboid(L, M)

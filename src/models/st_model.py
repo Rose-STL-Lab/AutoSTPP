@@ -2,26 +2,20 @@ import torch
 from torch import nn
 from loguru import logger
 
-from src.integration.autoint import Cuboid
+from integration.autoint import Cuboid
 
 
 class AutoIntSTPPSameInfluence(nn.Module):
 
-    def __init__(self, hidden_size, device):
-        """
-        :param: hidden_size: the dimension of linear hidden layer
-        :param: t_end: the time when observation terminates
-                if is None, then time after last event is not considered
-        """
+    def __init__(self, cuboid: Cuboid, device):
         super().__init__()
-        self.hidden_size = hidden_size
         self.device = device
 
         # log background intensity
         self.background = torch.nn.Parameter(torch.ones(1))
 
         # ∫_0^t λ
-        self.F = Cuboid().to(device)
+        self.F = cuboid.to(device)
 
         self.project()
 
@@ -93,4 +87,3 @@ class AutoIntSTPPSameInfluence(nn.Module):
         sll = ll - tll
 
         return -ll, sll, tll
-

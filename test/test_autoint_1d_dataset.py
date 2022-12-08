@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import relpath, update_params, get_params, log_config
+from conftest import relpath, update_params, get_params, log_config, plot_training_progress
 
     
 @pytest.fixture(
@@ -72,16 +72,16 @@ def dataloader(device, request):
     else:
         raise NotImplementedError
         
-    trainset = TPPWrapper(lamb_func, n_sample=split[0], t_end=t_end, max_lamb=100, fn=f'data/temporal/{name}.db')
-    trainloader = DataLoader(trainset, shuffle=True, batch_size=batch_size, collate_fn=pad_collate)
-    valset = TPPWrapper(lamb_func, n_sample=split[1], n_start=split[0], t_end=t_end, max_lamb=100, 
-                        fn=f'data/temporal/{name}.db')
-    valloader = DataLoader(valset, shuffle=False, batch_size=batch_size, collate_fn=pad_collate)
-    testset = TPPWrapper(lamb_func, n_sample=split[2], n_start=split[0] + split[1], t_end=t_end, max_lamb=100, 
+    train_set = TPPWrapper(lamb_func, n_sample=split[0], t_end=t_end, max_lamb=100, fn=f'data/temporal/{name}.db')
+    train_loader = DataLoader(train_set, shuffle=True, batch_size=batch_size, collate_fn=pad_collate)
+    val_set = TPPWrapper(lamb_func, n_sample=split[1], n_start=split[0], t_end=t_end, max_lamb=100, 
+                         fn=f'data/temporal/{name}.db')
+    val_loader = DataLoader(val_set, shuffle=False, batch_size=batch_size, collate_fn=pad_collate)
+    test_set = TPPWrapper(lamb_func, n_sample=split[2], n_start=split[0] + split[1], t_end=t_end, max_lamb=100, 
                             fn=f'data/temporal/{name}.db')
-    testloader = DataLoader(testset, shuffle=False, batch_size=batch_size, collate_fn=pad_collate)
+    test_loader = DataLoader(test_set, shuffle=False, batch_size=batch_size, collate_fn=pad_collate)
 
-    return lamb_func, t_end, trainset, valset, testset, trainloader, valloader, testloader
+    return lamb_func, t_end, train_set, val_set, test_set, train_loader, val_loader, test_loader
 
 
 @pytest.fixture(
@@ -103,7 +103,7 @@ def trained_model(dataloader, device, request):
     update_params("trained_model", request)
     log_config()
     
-    lamb_func, t_end, trainset, valset, testset, trainloader, valloader, testloader = dataloader
+    lamb_func, t_end, train_set, val_set, test_set, train_loader, val_loader, test_loader = dataloader
     
     model_name = request.param['name']
     hidden_size = request.param['hidden_size']
@@ -157,7 +157,7 @@ def trained_model(dataloader, device, request):
         train_loss = []
         train_like = []
 
-        for i, (seq_pads, seq_lens, _) in enumerate(trainloader):
+        for i, (seq_pads, seq_lens, _) in enumerate(train_loader):
             optimizer.zero_grad()
             
             seq_pads = seq_pads.float().to(device)
@@ -197,13 +197,13 @@ def trained_model(dataloader, device, request):
         scheduler.step()
         
         # Validate the model
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % request.param['n_eval_epoch'] == 0:
             model.eval()
             
             val_loss = []
             val_like = []
             
-            for (seq_pads, seq_lens, _) in valloader:
+            for (seq_pads, seq_lens, _) in val_loader:
                 seq_pads = seq_pads.float().to(device)
                 
                 if model_name == 'neural-hawkes':
@@ -244,36 +244,18 @@ def trained_model(dataloader, device, request):
 
 class TestClass:
 
-    @staticmethod
-    def plot_training_progress(train_losses, val_losses, file_name):
-        import plotly.graph_objects as go
-        import numpy as np
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(y=train_losses, mode='lines', name='train',  marker_size=4))
-        fig.add_trace(go.Scatter(x=np.arange(9, 1000, 10)[:len(val_losses)], y=val_losses, mode='lines', 
-                                 name='val', marker_size=4))
-
-        fig.update_layout(
-            title=r"Training progress",
-            xaxis_title="x",
-            yaxis_title="f",
-        )
-
-        fig.write_html(f"{relpath('figs', True)}/{file_name}.html")
-
-    def test_result(self, device, dataloader, trained_model):
+    def test_result(self, dataloader, trained_model):
         from utils import evaluate, plot_predict_intensity
         from loguru import logger
         from predict import get_predict
         
         model, train_losses, val_losses = trained_model
         model.eval()
-        lamb_func, t_end, trainset, valset, testset, trainloader, valloader, testloader = dataloader
+        lamb_func, t_end, train_set, val_set, test_set, train_loader, val_loader, test_loader = dataloader
         predict = get_predict(model)
         
-        self.plot_training_progress(train_losses, val_losses, "training")
+        plot_training_progress(train_losses, val_losses, f"{relpath('figs', True)}/training")
         
-        fig = plot_predict_intensity(lamb_func, predict, model, trainset.seqs[0].numpy(), t_end=t_end)
+        fig = plot_predict_intensity(lamb_func, predict, model, train_set.seqs[0].numpy(), t_end=t_end)
         fig.savefig(f"{relpath('figs', True)}/intensity.png")
-        logger.critical(evaluate(lamb_func, predict, model, testset.seqs))
+        logger.critical(evaluate(lamb_func, predict, model, test_set.seqs))

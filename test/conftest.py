@@ -122,3 +122,21 @@ def log_config() -> None:
     """
     from loguru import logger
     logger.info(pytest.fn_params)
+
+
+def plot_training_progress(train_losses, val_losses, file_name) -> None:
+    import plotly.graph_objects as go
+    import numpy as np
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(y=train_losses, mode='lines', name='train',  marker_size=4))
+    fig.add_trace(go.Scatter(x=np.arange(9, 1000, 10)[:len(val_losses)], y=val_losses, mode='lines', 
+                                name='val', marker_size=4))
+
+    fig.update_layout(
+        title=r"Training progress",
+        xaxis_title="x",
+        yaxis_title="f",
+    )
+
+    fig.write_html(f"{file_name}.html")
