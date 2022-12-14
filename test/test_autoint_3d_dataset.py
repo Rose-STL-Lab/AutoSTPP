@@ -39,24 +39,27 @@ def trained_model(cuboid, dataloader, device, request):
     import torch
     from loguru import logger
     import os
+    import wandb
     
     from utils import AverageMeter, tenumerate, eval_loss
-    from models.st_model import AutoIntSTPPSameInfluence
+    from models.spatiotemporal.model import AutoIntSTPPSameInfluence
+    from models.spatiotemporal.numint import MonteCarloSTPPSameInfluence
     
     update_params('trained_model', request)
+    wandb.config.update(pytest.config)
+        
     model_fn = relpath('models') + '.pkl'
     log_config()
     train_loader, val_loader, test_loader = dataloader
     
     model_name = request.param['name']
     if model_name == 'auto-stpp':
-        model = AutoIntSTPPSameInfluence(cuboid, device=device).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=request.param['lr'])
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.2)
+        model = AutoIntSTPPSameInfluence(cuboid, device=device)
+    elif model_name == 'monte-carlo-stpp':
+        model = MonteCarloSTPPSameInfluence(cuboid, device=device)
     
-    sll_meter = AverageMeter()
-    tll_meter = AverageMeter()
-    loss_meter = AverageMeter()
+    optimizer = torch.optim.Adam(model.parameters(), lr=request.param['lr'])
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.2)
     
     train_losses = []
     val_losses = []
@@ -75,44 +78,52 @@ def trained_model(cuboid, dataloader, device, request):
             logger.info('Previous model not found. Retraining...')
 
     for epoch in range(request.param['n_epoch']):
-        train_loss = []
+        sll_meter = AverageMeter()
+        tll_meter = AverageMeter()
+        nll_meter = AverageMeter()
         
         model.train()
         for index, data in tenumerate(train_loader):
             st_x, st_y, _, _, _ = data
             optimizer.zero_grad()
-            loss, sll, tll = model(st_x, st_y)
+            nll, sll, tll = model(st_x, st_y)
 
-            if torch.isnan(loss):
+            if torch.isnan(nll):
                 logger.error("Numerical error, quiting...")
 
-            loss.backward()
+            nll.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), request.param['gradient_clip'])
             optimizer.step()
 
             # Project to feasible set
-            model.project()
+            if model_name == 'auto-stpp':
+                model.project()
 
-            loss_meter.update(loss.item())
-            sll_meter.update(sll.mean().item())
-            tll_meter.update(tll.mean().item())
-            
-            train_loss.append(loss.item())
+            nll_meter.update(nll.item())
+            sll_meter.update(sll.item())
+            tll_meter.update(tll.item())
 
-        train_losses.append(sum(train_loss) / len(train_loss))
+        train_losses.append(nll_meter.avg)
+        wandb.log({'train_nll': nll.item()})
+        wandb.log({'train_sll': sll.item()})
+        wandb.log({'train_tll': tll.item()})
+        
         logger.debug("In Epoch {} | "
                      "total loss: {:5f} | Space: {:5f} | Time: {:5f}".format(
-            epoch, loss_meter.avg, sll_meter.avg, tll_meter.avg
+            epoch, nll_meter.avg, sll_meter.avg, tll_meter.avg
         ))
         scheduler.step()
 
         if (epoch + 1) % request.param['n_eval_epoch'] == 0:
             model.eval()
-            val_loss, val_s, val_t = eval_loss(model, val_loader)
-            val_losses.append(val_loss)
+            val_nll, val_sll, val_tll = eval_loss(model, val_loader)
+            val_losses.append(val_nll)
+            wandb.log({'val_nll': val_nll})
+            wandb.log({'val_sll': val_sll})
+            wandb.log({'val_tll': val_tll})
             
-            logger.info("Evaluate   | Val Loss {:5f} | Space: {:5f} | Time: {:5f}".format(val_loss, val_s, val_t))
-            if val_loss == min(val_losses):   
+            logger.info("Evaluate   | Val Loss {:5f} | Space: {:5f} | Time: {:5f}".format(val_nll, val_sll, val_tll))
+            if val_nll == min(val_losses):   
                 torch.save({
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),

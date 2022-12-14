@@ -8,6 +8,14 @@ import inspect
 import os
 
 
+@pytest.fixture(scope='session', autouse=True)
+def wandb():
+    import wandb
+    
+    wandb.init(mode='disabled')
+    # wandb.init(project=pytest.fn, entity="point-process")
+
+
 @pytest.fixture(scope='module', autouse=True)
 def device():
     from utils import get_device
@@ -21,7 +29,9 @@ def get_params(key: str, caller_fn: str = ''):
     if caller_fn == '':  # No filename given
         caller_fn = inspect.stack()[1].filename  # Absolute path
         
-    fn = caller_fn.split('.')[0].split('/')[-1]  # Relative path
+    assert '.py' in caller_fn
+    fn = caller_fn[:caller_fn.rindex('.py')]
+    fn = fn[fn.rindex('/') + 1:]
     logger.debug(f'Loading {key} config from configs/{fn}.yaml')
     configs: Dict[str, Dict[str, List]] = load_config(fn)
     pytest.config[caller_fn] = deepcopy(configs)
@@ -53,10 +63,10 @@ def pytest_configure():
     import sys
 
     # NOTICE: test config should always be dictionary of lists
-    logger.info(sys.argv)
     fn = sys.argv[-1]  # Current test file name
-    fn = fn[:fn.rindex('.py')]
-    pytest.fn = fn
+    if '.py' in fn:
+        fn = fn[:fn.rindex('.py')]
+    pytest.fn = fn[fn.rindex('/') + 1:]
     pytest.fn_params = {}  # Parameters that need to be in the filename
     pytest.config = {}  # Configs for different test files
     # Add a file logger
@@ -80,7 +90,8 @@ def pytest_unconfigure():
     Run after all tests, to parse and store the test results
     """
     from loguru import logger
-    logger.debug(pytest.config)
+    if hasattr(pytest, 'config'):
+        logger.debug(pytest.config)
     if hasattr(pytest, 'fn') and hasattr(pytest, 'result'):
         logger.info(pytest.fn)
         logger.info(pytest.result)

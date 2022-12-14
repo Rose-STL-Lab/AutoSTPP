@@ -118,6 +118,17 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
+name = "docker-pycreds"
+version = "0.4.0"
+description = "Python bindings for the docker credentials store API"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+six = ">=1.4.0"
+
+[[package]]
 name = "docutils"
 version = "0.19"
 description = "Docutils -- Python Documentation Utilities"
@@ -170,6 +181,28 @@ type1 = ["xattr"]
 ufo = ["fs (>=2.2.0,<3)"]
 unicode = ["unicodedata2 (>=14.0.0)"]
 woff = ["zopfli (>=0.1.4)", "brotlicffi (>=0.8.0)", "brotli (>=1.0.1)"]
+
+[[package]]
+name = "gitdb"
+version = "4.0.10"
+description = "Git Object Database"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+smmap = ">=3.0.1,<6"
+
+[[package]]
+name = "gitpython"
+version = "3.1.29"
+description = "GitPython is a python library used to interact with Git repositories"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+gitdb = ">=4.0.1,<5"
 
 [[package]]
 name = "idna"
@@ -331,6 +364,14 @@ pytz = ">=2020.1"
 test = ["hypothesis (>=5.5.3)", "pytest (>=6.0)", "pytest-xdist (>=1.31)"]
 
 [[package]]
+name = "pathtools"
+version = "0.1.2"
+description = "File system general utilities"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "pillow"
 version = "9.3.0"
 description = "Python Imaging Library (Fork)"
@@ -365,6 +406,39 @@ python-versions = ">=3.6"
 [package.extras]
 dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
+
+[[package]]
+name = "promise"
+version = "2.3"
+description = "Promises/A+ implementation for Python"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+six = "*"
+
+[package.extras]
+test = ["pytest (>=2.7.3)", "pytest-cov", "coveralls", "futures", "pytest-benchmark", "mock"]
+
+[[package]]
+name = "protobuf"
+version = "4.21.11"
+description = ""
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[[package]]
+name = "psutil"
+version = "5.9.4"
+description = "Cross-platform lib for process and system monitoring in Python."
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+
+[package.extras]
+test = ["ipaddress", "mock", "enum34", "pywin32", "wmi"]
 
 [[package]]
 name = "pycodestyle"
@@ -545,6 +619,50 @@ doc = ["sphinx (!=4.1.0)", "pydata-sphinx-theme (==0.9.0)", "sphinx-panels (>=0.
 dev = ["mypy", "typing-extensions", "pycodestyle", "flake8"]
 
 [[package]]
+name = "sentry-sdk"
+version = "1.11.1"
+description = "Python client for Sentry (https://sentry.io)"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+certifi = "*"
+urllib3 = {version = ">=1.26.11", markers = "python_version >= \"3.6\""}
+
+[package.extras]
+aiohttp = ["aiohttp (>=3.5)"]
+beam = ["apache-beam (>=2.12)"]
+bottle = ["bottle (>=0.12.13)"]
+celery = ["celery (>=3)"]
+chalice = ["chalice (>=1.16.0)"]
+django = ["django (>=1.8)"]
+falcon = ["falcon (>=1.4)"]
+fastapi = ["fastapi (>=0.79.0)"]
+flask = ["flask (>=0.11)", "blinker (>=1.1)"]
+httpx = ["httpx (>=0.16.0)"]
+pure_eval = ["pure-eval", "executing", "asttokens"]
+pymongo = ["pymongo (>=3.1)"]
+pyspark = ["pyspark (>=2.4.4)"]
+quart = ["quart (>=0.16.1)", "blinker (>=1.1)"]
+rq = ["rq (>=0.6)"]
+sanic = ["sanic (>=0.8)"]
+sqlalchemy = ["sqlalchemy (>=1.2)"]
+starlette = ["starlette (>=0.19.1)"]
+tornado = ["tornado (>=5)"]
+
+[[package]]
+name = "setproctitle"
+version = "1.3.2"
+description = "A Python module to customize the process title"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+test = ["pytest"]
+
+[[package]]
 name = "setuptools-scm"
 version = "7.0.5"
 description = "the blessed package to manage your versions by scm tags"
@@ -562,6 +680,14 @@ test = ["pytest (>=6.2)", "virtualenv (>20)"]
 toml = ["setuptools (>=42)"]
 
 [[package]]
+name = "shortuuid"
+version = "1.0.11"
+description = "A generator library for concise, unambiguous and URL-safe UUIDs."
+category = "main"
+optional = false
+python-versions = ">=3.5"
+
+[[package]]
 name = "six"
 version = "1.16.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -576,6 +702,14 @@ description = "deprecated sklearn package, use scikit-learn instead"
 category = "main"
 optional = false
 python-versions = "*"
+
+[[package]]
+name = "smmap"
+version = "5.0.0"
+description = "A pure Python implementation of a sliding window memory map manager"
+category = "main"
+optional = false
+python-versions = ">=3.6"
 
 [[package]]
 name = "snowballstemmer"
@@ -788,6 +922,42 @@ secure = ["pyOpenSSL (>=0.14)", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "cer
 socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 
 [[package]]
+name = "wandb"
+version = "0.13.6"
+description = "A CLI and library for interacting with the Weights and Biases API."
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+Click = ">=7.0,<8.0.0 || >8.0.0"
+docker-pycreds = ">=0.4.0"
+GitPython = ">=1.0.0"
+pathtools = "*"
+promise = ">=2.0,<3"
+protobuf = [
+    {version = ">=3.15.0,<4.21.0 || >4.21.0,<5", markers = "python_version == \"3.9\" and sys_platform == \"linux\""},
+    {version = ">=3.19.0,<4.21.0 || >4.21.0,<5", markers = "python_version > \"3.9\" and sys_platform == \"linux\" or sys_platform != \"linux\""},
+]
+psutil = ">=5.0.0"
+PyYAML = "*"
+requests = ">=2.0.0,<3"
+sentry-sdk = ">=1.0.0"
+setproctitle = "*"
+shortuuid = ">=0.5.0"
+
+[package.extras]
+aws = ["boto3"]
+azure = ["azure-storage-blob"]
+gcp = ["google-cloud-storage"]
+grpc = ["grpcio (>=1.27.2)"]
+kubeflow = ["kubernetes", "minio", "google-cloud-storage", "sh"]
+launch = ["nbconvert", "nbformat", "chardet", "iso8601", "typing-extensions", "boto3", "botocore", "google-cloud-storage", "kubernetes"]
+media = ["numpy", "moviepy", "pillow", "bokeh", "soundfile", "plotly", "rdkit-pypi"]
+models = ["cloudpickle"]
+sweeps = ["sweeps (>=0.2.0)"]
+
+[[package]]
 name = "win32-setctime"
 version = "1.1.0"
 description = "A small Python utility to set file creation time on Windows"
@@ -813,7 +983,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "flake8 
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "dbced0fb62b2219632307f7618bd58ac796dff119e0399df3ddbea3af1ca2ff1"
+content-hash = "05e5a7de8e4091f2712001088ffb4cabd44cf96d42370bb4c9f8797cbe53350c"
 
 [metadata.files]
 alabaster = []
@@ -827,10 +997,13 @@ commonmark = []
 contourpy = []
 coverage = []
 cycler = []
+docker-pycreds = []
 docutils = []
 exceptiongroup = []
 flake8 = []
 fonttools = []
+gitdb = []
+gitpython = []
 idna = []
 imagesize = []
 importlib-metadata = []
@@ -845,9 +1018,13 @@ mccabe = []
 numpy = []
 packaging = []
 pandas = []
+pathtools = []
 pillow = []
 plotly = []
 pluggy = []
+promise = []
+protobuf = []
+psutil = []
 pycodestyle = []
 pyflakes = []
 pygments = []
@@ -862,9 +1039,13 @@ rich = []
 rose-colormap = []
 scikit-learn = []
 scipy = []
+sentry-sdk = []
+setproctitle = []
 setuptools-scm = []
+shortuuid = []
 six = []
 sklearn = []
+smmap = []
 snowballstemmer = []
 sphinx = []
 sphinxcontrib-applehelp = []
@@ -882,5 +1063,6 @@ tqdm = []
 typeguard = []
 typing-extensions = []
 urllib3 = []
+wandb = []
 win32-setctime = []
 zipp = []

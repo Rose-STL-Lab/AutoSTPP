@@ -99,3 +99,8 @@ logs/
 kube/
 id_rsa*
 *.bck
+
+notebooks/covid
+notebooks/deep-stpp
+*.zip
+wandb/
