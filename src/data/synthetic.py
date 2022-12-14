@@ -1,4 +1,4 @@
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,6 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 import abc
 
 from scipy.integrate import quad, quad_vec
+from utils import arange
 
 eps = 1e-10  # A negligible positive number
 
@@ -26,7 +27,7 @@ def spatiotemporal_events_collate_fn(data):
     dim = data[0].shape[1]
     lengths = [seq.shape[0] for seq in data]
     max_len = max(lengths)
-    padded_seqs = [torch.cat([torch.zeros(max_len - s.shape[0], dim).to(s), s], 0) # from the front
+    padded_seqs = [torch.cat([torch.zeros(max_len - s.shape[0], dim).to(s), s], 0)  # From the front
                    if s.shape[0] != max_len else s for s in data]
     data = torch.stack(padded_seqs, dim=0)
     mask = torch.stack([torch.cat([torch.zeros(max_len - seq_len), torch.ones(seq_len - 1),
@@ -73,14 +74,34 @@ class SyntheticDataset(abc.ABC):
     def g0(s, s_mu, s_sqrt_inv_det_cov, s_inv_cov):
         """
         g0(s) = 1 / 2π * |Σ|^(-0.5) * exp{ - 0.5 (s-mean_s) Σ^(-1) (s-mean_s)' }
+        
+        :param s: shape [2], or shape [N, 2]
+        :param s_mu: mean of the spatial distribution, shape [2], no broadcasting
+        :param s_sqrt_inv_det_cov: float, square root of the inverse of the determinant of the covariance matrix
+        :param s_inv_cov: shape [2, 2], inverse of the covariance matrix
+        :return: shape [1], or shape [N]
         """
-        return SyntheticDataset.g2(s, s_mu.reshape(1, 2), s_sqrt_inv_det_cov, s_inv_cov)
+        assert s_mu.shape == (2,), "Mean shape should be [2,]"
+        result = SyntheticDataset.g2(s, s_mu, s_sqrt_inv_det_cov, s_inv_cov)
+        if len(s.shape) == 2:
+            result = result.squeeze(-1)
+        return result
 
     @staticmethod
     def g1(t, his_t, alpha, beta):
         """
         g1(δt) = α * exp{ - β δt }
+        
+        :param t: float, or shape [N]
+        :param his_t: [his_len,], or [N, his_len,]
+        :return: shape [his_len,] or shape [N, his_len]
         """
+        flag = False
+        if type(t) is np.ndarray and len(t.shape) == 1:
+            t = np.reshape(t, (-1, 1))
+            flag = True
+        if flag and len(his_t) == 1:  # Handle multiple t and single his_t
+            his_t = np.reshape(his_t, (1, -1))
         delta_t = t - his_t
         return alpha * np.exp(-beta * delta_t)
 
@@ -88,10 +109,26 @@ class SyntheticDataset(abc.ABC):
     def g2(s, his_s, s_sqrt_inv_det_cov, s_inv_cov):
         """
         g2(δs) = 1 / 2π * |Σ|^(-0.5) * exp{ - 0.5 δs Σ^(-1) δs' }
+        
+        :param s: shape [2], or shape [N, 2]
+        :param his_s: [his_len, 2], or [N, his_len, 2], or [2] (for s_mu)
+        :param s_sqrt_inv_det_cov: float, square root of the inverse of the determinant of the covariance matrix
+        :param s_inv_cov: shape [2, 2], inverse of the covariance matrix
+        :return: shape [his_len], or shape [N, his_len]
         """
+        if flag := len(s.shape) == 1:
+            s = np.reshape(s, (1, 1, 2))
+        else:
+            s = np.reshape(s, (-1, 1, 2))
+        if len(his_s.shape) == 2:
+            his_s = np.reshape(his_s, (1, *his_s.shape))
+            
         delta_s = s - his_s
-        return 1 / 2 / np.pi * s_sqrt_inv_det_cov * \
-               np.exp(-np.einsum('ij,ij->i', delta_s.dot(s_inv_cov), delta_s) / 2)
+        result = 1 / 2 / np.pi * s_sqrt_inv_det_cov * \
+                 np.exp(-np.einsum('kij,kij->ki', delta_s.dot(s_inv_cov), delta_s) / 2)
+        if flag and len(result) == 1:
+            result = result[0]
+        return result
 
     def save(self, text_path):
         """
@@ -221,14 +258,18 @@ class SyntheticDataset(abc.ABC):
         self.test = ListDataset(st_input[-test_size:])
 
         print("Finished.")
-
-
+        
     def get_lamb_st(self, x_num, y_num, t_num, t_start, t_end):
         """
         return lamb_st for a given time range
-        x_num, y_num, t_num: resolution of x, y, and t
-
-        return: lambs, x_range, y_range, t_range
+        
+        :param x_num: int, resolution of x
+        :param y_num: int, resolution of y
+        :param t_num: int, resolution of t
+        :return lambs: List of len (t_num+1), element np array [x_num+1, y_num+1]
+        :return x_range: np array [x_num+1]
+        :return y_range: np array [y_num+1]
+        :return t_range: np array [t_num+1]
         """
         idx = np.logical_and(self.his_t >= t_start, self.his_t < t_end)
 
@@ -300,7 +341,7 @@ class STSCPDataset(SyntheticDataset):
         λ(s,t|H) = g0(s) μ exp(βt - α ∑g2(δs))
         """
         i = self.stoi(s)
-        lamb_st = mu[i] * np.exp(self.g0_mat[i] * self.beta * t - self.alpha * \
+        lamb_st = mu[i] * np.exp(self.g0_mat[i] * self.beta * t - self.alpha *
                                  np.sum(self.g2_mats[self.stoi(his_s), i]))
         return np.minimum(self.lamb_max * np.ones(lamb_st.shape), lamb_st)
 
@@ -308,7 +349,7 @@ class STSCPDataset(SyntheticDataset):
         """
         Calculate intensity all over the space
         """
-        lamb_St = mu * np.exp(self.g0_mat * self.beta * t - self.alpha * \
+        lamb_St = mu * np.exp(self.g0_mat * self.beta * t - self.alpha *
                               np.sum(self.g2_mats[self.stoi(his_s)].reshape(-1, self.x_num * self.y_num), 0))
         return np.minimum(self.lamb_max * np.ones(lamb_St.shape), lamb_St)
 
@@ -409,7 +450,7 @@ class STSCPDataset(SyntheticDataset):
         return lamb_st for a given time range
         """
         idx = np.logical_and(self.his_t >= t_start, self.his_t < t_end)
-        his_t = self.his_t[idx]
+        # his_t = self.his_t[idx]
         his_s = self.his_s[idx]
 
         x_max, y_max = np.max(his_s, 0)
@@ -482,7 +523,7 @@ class STHPDataset(SyntheticDataset):
         λ(s,t|H) = μ g0(s) + ∑g1(δt)g2(δs)
         """
         return self.mu * self.g0(s, self.s_mu, self.g0_sidc, self.g0_ic) + \
-               np.sum(self.g1(t, self.trunc(self.his_t[self.his_t < t]), self.alpha, self.beta) * \
+               np.sum(self.g1(t, self.trunc(self.his_t[self.his_t < t]), self.alpha, self.beta) *
                       self.g2(s, self.trunc(self.his_s[self.his_t < t]), self.g2_sidc, self.g2_ic))
 
     def predict_next(self, i):
@@ -494,18 +535,14 @@ class STHPDataset(SyntheticDataset):
         ti = self.his_t[i]
         c = self.alpha * np.sum(np.exp(-self.beta * (ti - self.trunc(self.his_t[:(i + 1)]))))
 
-        int_lamb = lambda t: np.exp(c / self.beta * (np.exp(-self.beta * (t - ti)) - 1)
-                                    - self.mu * (t - ti))
+        int_lamb = lambda t: np.exp(c / self.beta * (np.exp(-self.beta * (t - ti)) - 1) - 
+                                    self.mu * (t - ti))
 
         time_pdf = lambda t: t * (self.mu + c * np.exp(-self.beta * (t - ti))) * int_lamb(t)
 
-        space_pdf = lambda t: (self.mu * self.s_mu + self.alpha * np.sum(np.exp(-self.beta
-                                                                                * (
-                                                                                        t - self.trunc(
-                                                                                    self.his_t[:(i + 1)])))[
-                                                                         :, np.newaxis]
-                                                                         * self.trunc(self.his_s[:(i + 1)]),
-                                                                         axis=0)) * int_lamb(t)
+        space_pdf = lambda t: (self.mu * self.s_mu + self.alpha * 
+                               np.sum(np.exp(-self.beta * (t - self.trunc(self.his_t[:(i + 1)])))[:, np.newaxis] * 
+                                      self.trunc(self.his_s[:(i + 1)]), axis=0)) * int_lamb(t)
 
         return quad_vec(space_pdf, ti, np.inf)[0], quad(time_pdf, ti, np.inf)[0]
 
@@ -594,9 +631,9 @@ class STHPDataset(SyntheticDataset):
         # - ∑ log λ(s_i, t_i)
         term_1 = 0
         for i in range(1, len(self.his_s)):
-            lamb = mu * self.g0(self.his_s[i], s_mu, g0_sidc, g0_ic) + \
-                   np.sum(self.g1(self.his_t[i], self.trunc(self.his_t[:i]), alpha, beta) * \
+            lamb = np.sum(self.g1(self.his_t[i], self.trunc(self.his_t[:i]), alpha, beta) *
                           self.g2(self.his_s[i], self.trunc(self.his_s[:i]), g2_sidc, g2_ic))
+            lamb += mu * self.g0(self.his_s[i], s_mu, g0_sidc, g0_ic)
             term_1 -= np.log(lamb)
 
         # + ∫∫ λ(s,t) dsdt = μT - α/β ∑ [exp(-β(T-t_i)) - 1]

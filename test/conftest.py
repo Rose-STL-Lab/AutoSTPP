@@ -34,9 +34,9 @@ def get_params(key: str, caller_fn: str = ''):
     fn = fn[fn.rindex('/') + 1:]
     logger.debug(f'Loading {key} config from configs/{fn}.yaml')
     configs: Dict[str, Dict[str, List]] = load_config(fn)
-    pytest.config[caller_fn] = deepcopy(configs)
+    pytest.config[fn] = deepcopy(configs)
 
-    for fixture_name in pytest.config[caller_fn]:
+    for fixture_name in pytest.config[fn]:
         if type(configs[fixture_name]) is not dict:  # Non-fixture parameters
             del configs[fixture_name]
             continue
@@ -66,11 +66,14 @@ def pytest_configure():
     fn = sys.argv[-1]  # Current test file name
     if '.py' in fn:
         fn = fn[:fn.rindex('.py')]
-    pytest.fn = fn[fn.rindex('/') + 1:]
+        # Add a file logger
+        logger.add(f'{relpath_under("logs", fn)}.log', format=default_fmt, level="DEBUG")
+        
+    if '/' in fn:
+        fn = fn[fn.rindex('/') + 1:]
+    pytest.fn = fn
     pytest.fn_params = {}  # Parameters that need to be in the filename
     pytest.config = {}  # Configs for different test files
-    # Add a file logger
-    logger.add(f'{relpath_under("logs", fn)}.log', format=default_fmt, level="DEBUG")
     pytest.result = {}
 
 
