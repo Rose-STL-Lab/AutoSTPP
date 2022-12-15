@@ -113,3 +113,43 @@ class TestClass:
         actual_5 = sthp.g1(t_5, his_t_5, sthp.alpha, sthp.beta)
         assert expect_5.shape == actual_5.shape
         assert np.allclose(actual_5, expect_5)
+
+    @staticmethod
+    def test_lamb_st(sthp):
+        for t_1 in [10.0, np.array([10.0]), np.array(10.0)]:
+            s_1 = np.array([0.0, 0.0])
+            expect_1 = np.array([0.00479825])
+            actual_1 = sthp.lamb_st(s_1, t_1)
+            assert expect_1.shape == actual_1.shape
+            assert np.allclose(actual_1, expect_1)
+        
+        t_2 = 15.0
+        s_2 = np.array([0.0, 1.0])
+        expect_2 = np.array([0.00765035])
+        actual_2 = sthp.lamb_st(s_2, t_2)
+        assert expect_2.shape == actual_2.shape
+        assert np.allclose(actual_2, expect_2)
+        
+        # Batch test 1 (one t and N s)
+        t_3 = t_1
+        s_3 = np.stack([s_1, s_2], 0)
+        expect_3 = np.stack([expect_1.item(), 0.05426189], 0)
+        actual_3 = sthp.lamb_st(s_3, t_3)
+        assert expect_3.shape == actual_3.shape
+        assert np.allclose(actual_3, expect_3)
+        
+        # Batch test 2 (N t and one s)
+        t_4 = np.array([t_1, t_2])
+        s_4 = s_2
+        expect_4 = np.stack([expect_3[1].item(), expect_2.item()], 0)
+        actual_4 = sthp.lamb_st(s_4, t_4)
+        assert expect_4.shape == actual_4.shape
+        assert np.allclose(actual_4, expect_4)
+        
+        # Batch test 3 (N t and N s)
+        t_5 = np.array([t_1, t_2])
+        s_5 = np.stack([s_1, s_2], 0)
+        expect_5 = np.stack([expect_1.item(), expect_2.item()], 0)
+        actual_5 = sthp.lamb_st(s_5, t_5)
+        assert expect_5.shape == actual_5.shape
+        assert np.allclose(actual_5, expect_5)

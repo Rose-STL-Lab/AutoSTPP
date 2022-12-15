@@ -387,19 +387,28 @@ def scale(tensor, bound):
     return tensor
 
 
-def arange(N: int, bound, lib: Any = np):
+def arange(N, bound, lib: Any = np):
     """
     Higher (d) dimensional version of np/torch arange
 
-    :param N: number of data points for each dimension
-    :param bound: a list of `d` two-tuples defining MinMax
+    :param N: number of data points for each dimension, can be an int or a list of `d` ints
+    :param bound: MinMax for each dimension, must be a list of `d` two-tuples
     :param lib: the tensor library, numpy or torch
     :return: ((N+1)**d, d) border-inclusive tensor uniformly covering the bounded region
     """
     assert lib == torch or lib == np, "Unsupported library"
     d = len(bound)
-    ticks = lib.arange(0., 1. + 1. / N, 1. / N)
-    X = lib.meshgrid(*([ticks] * d))
+    if type(N) is int:
+        N = [N] * d
+    else:
+        assert len(N) == d, "N and bound's dimension must match"
+    ticks = []
+    for n in N:
+        assert type(n) == int, "Number of data points must be an int"
+        assert n >= 1, "Number of data points must be at least 1"
+        tick = lib.arange(0., 1. + 1. / n, 1. / n)
+        ticks.append(tick)
+    X = lib.meshgrid(*ticks)
     X = lib.vstack([X_.flatten() for X_ in X]).T
     if bound is not None:
         X = scale(X, bound)
@@ -439,6 +448,47 @@ def deprecated(func):
         return func(*args, **kwargs)
         
     return new_func
+
+
+def get_minmax(seqs, roll=True, device=torch.device("cuda:0")):
+    """
+    Get MinMax scalers of space and delta_t such that spaces are mapped to [0, 1]^d
+    and delta_t has an average of 1
+
+    :param seqs: a list of sequences of np shape [N, 3], time is the first dimension
+    :param roll: whether to roll the time to the last dimension
+    :return: a tuple of (min, max) of torch shape [3]
+    """
+    for i, seq in enumerate(seqs):
+        seqs[i][:, 0] = np.diff(seq[:, 0], axis=0, prepend=0)
+    if roll:
+        seqs = [np.roll(seq, -1, -1) for seq in seqs]        
+    temp = np.vstack(seqs)
+    min = torch.tensor(np.min(temp, 0)).float().to(device)
+    max = torch.tensor(np.max(temp, 0)).float().to(device)
+    if roll:
+        min[-1] = 0.
+        max[-1] = np.mean(temp[:, -1])
+    else:
+        min[0] = 0.
+        max[0] = np.mean(temp[:, 0])
+    return min, max
+
+
+def scale_ll(dataloader, nll, sll, tll):
+    """
+    Scale the log likelihoods to the original scale
+    
+    :param dataloader: dataloader of a SlidingWindowWrapper (has `min` and `max` attribute)
+    :param nll: the negative total log likelihood
+    :param sll: the spatial log likelihood
+    :param tll: the temporal log likelihood
+    """
+    assert hasattr(dataloader.dataset, 'max') and hasattr(dataloader.dataset, 'min')
+    s0_scale, s1_scale, t_scale = dataloader.dataset.max - dataloader.dataset.min
+    t_scale = torch.log(t_scale)
+    s_scale = torch.log(s0_scale * s1_scale)
+    return nll + s_scale + t_scale, sll - s_scale, tll - t_scale
 
 
 if __name__ == '__main__':

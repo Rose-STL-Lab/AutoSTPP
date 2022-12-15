@@ -97,7 +97,7 @@ class SyntheticDataset(abc.ABC):
         :return: shape [his_len,] or shape [N, his_len]
         """
         flag = False
-        if type(t) is np.ndarray and len(t.shape) == 1:
+        if type(t) is np.ndarray and np.prod(t.shape) != 1:
             t = np.reshape(t, (-1, 1))
             flag = True
         if flag and len(his_t) == 1:  # Handle multiple t and single his_t
@@ -521,10 +521,38 @@ class STHPDataset(SyntheticDataset):
     def lamb_st(self, s, t):
         """
         λ(s,t|H) = μ g0(s) + ∑g1(δt)g2(δs)
+        
+        :param s: shape [2], or shape [N, 2]
+        :param t: float, or shape [N]
+        :return: shape [1], or shape [N]
         """
+        mask = 1.
+        if type(t) == np.ndarray and np.prod(t.shape) != 1:
+            idx = np.searchsorted(self.his_t, t)  # Number of events before each t
+            his_t_ = []
+            his_s_ = []
+            seq_lens = []
+            for i in idx:
+                idx_start = i - self.max_history if i > self.max_history else 0
+                idx_end = i
+                seq_len = idx_end - idx_start
+                his_t_.append(self.his_t[idx_start:idx_end])
+                his_s_.append(self.his_s[idx_start:idx_end])
+                seq_lens.append(seq_len)
+            his_t = np.zeros((len(his_t_), max(seq_lens)))  # Create padded array of history
+            his_s = np.zeros((len(his_s_), max(seq_lens), 2))
+            mask = np.zeros_like(his_t).astype(bool)
+            for i, his in enumerate(his_t_):
+                his_t[i, :len(his)] = his
+                his_s[i, :len(his)] = his_s_[i]
+                mask[i, :len(his)] = True
+        else:
+            his_t = self.trunc(self.his_t[self.his_t < t])
+            his_s = self.trunc(self.his_s[self.his_t < t])
+        
         return self.mu * self.g0(s, self.s_mu, self.g0_sidc, self.g0_ic) + \
-               np.sum(self.g1(t, self.trunc(self.his_t[self.his_t < t]), self.alpha, self.beta) *
-                      self.g2(s, self.trunc(self.his_s[self.his_t < t]), self.g2_sidc, self.g2_ic))
+               np.sum(self.g1(t, his_t, self.alpha, self.beta) *
+                      self.g2(s, his_s, self.g2_sidc, self.g2_ic) * mask, -1)
 
     def predict_next(self, i):
         """
@@ -671,6 +699,36 @@ class STHPDataset(SyntheticDataset):
         ax2.set_xlim([t_start, t_end])
         ax2.invert_yaxis()
         ax2.legend()
+        
+    def get_lamb_st(self, x_num, y_num, t_num, t_start, t_end):
+        """
+        return STHP lamb_st for a given time range
+        
+        :param x_num: int, resolution of x
+        :param y_num: int, resolution of y
+        :param t_num: int, resolution of t
+        :return lambs: List of len (t_num+1), element np array [x_num+1, y_num+1]
+        :return x_range: np array [x_num+1]
+        :return y_range: np array [y_num+1]
+        :return t_range: np array [t_num+1]
+        """
+        idx = np.logical_and(self.his_t >= t_start, self.his_t < t_end)
+
+        his_s = self.his_s[idx]
+
+        x_max, y_max = np.max(his_s, 0)
+        x_min, y_min = np.min(his_s, 0)
+
+        x_range = arange(x_num - 1, [[x_min, x_max]]).squeeze(-1)
+        y_range = arange(y_num - 1, [[y_min, y_max]]).squeeze(-1)
+        xy_range = arange([x_num - 1, y_num - 1], [[x_min, x_max], [y_min, y_max]])
+        t_range = np.linspace(t_start, t_end, t_num)
+        
+        lambs = []
+        for t in tqdm(t_range):
+            lamb_st = self.lamb_st(xy_range, t).reshape(x_num, y_num, order='F')
+            lambs.append(lamb_st)
+        return lambs, x_range, y_range, t_range
 
 
 class DEBMDataset(SyntheticDataset):
