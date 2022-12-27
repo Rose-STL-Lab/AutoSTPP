@@ -236,10 +236,10 @@ def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_ra
         for j, lamb_st_i in enumerate(lambs[0]):
             if heatmap:
                 fig.add_trace(go.Heatmap(z=lamb_st_i, x=x_range, y=y_range, zmin=cmin, zmax=cmax,
-                                         colorscale=colorscale), row=1, col=j+1)
+                                         colorscale=colorscale), row=1, col=j + 1)
             else:
                 fig.add_trace(go.Surface(z=lamb_st_i, x=x_range, y=y_range, cmin=cmin, cmax=cmax,
-                                         colorscale=colorscale), row=1, col=j+1)
+                                         colorscale=colorscale), row=1, col=j + 1)
     else:
         if heatmap:
             fig.add_trace(go.Heatmap(z=lambs[0], x=x_range, y=y_range, zmin=cmin, zmax=cmax, colorscale=colorscale))
@@ -265,10 +265,10 @@ def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_ra
     ]
 
     fig.update_scenes(  # Control zaxis for all subplots
-            aspectmode='cube',
-            zaxis_title='λ',
-            zaxis=dict(range=[cmin, cmax], autorange=False)
-        )
+        aspectmode='cube',
+        zaxis_title='λ',
+        zaxis=dict(range=[cmin, cmax], autorange=False)
+    )
 
     # Layout
     fig.update_layout(
@@ -387,7 +387,7 @@ class TrajectoryPlotter:
         fig = go.Figure(data=self.data, layout=self.layout)
         fig.show()
 
-    def save(self, fn = None) -> None:
+    def save(self, fn=None) -> None:
         """
         Save the plot (as HTML)
         :param fn: the saving filename, without HTML postfix
@@ -459,7 +459,7 @@ if __name__ == '__main__':
         x_range = np.arange(0.0, 1.01, 0.01)
         y_range = np.arange(0.0, 1.01, 0.01)
         t_range = np.arange(0.0, 40.1, 0.50)
-        lambs  = [gaussian_mixture(np.cos(t) + 1.0, np.sin(t) + 1.0) for t in t_range]
+        lambs = [gaussian_mixture(np.cos(t) + 1.0, np.sin(t) + 1.0) for t in t_range]
         lambs1 = [lamb_st + np.random.normal(loc=0.0, scale=0.05, size=lamb_st.shape) for lamb_st in lambs]
         lambs2 = [lamb_st + np.random.normal(loc=0.0, scale=0.2, size=lamb_st.shape) for lamb_st in lambs]
 

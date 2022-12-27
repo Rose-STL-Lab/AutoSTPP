@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_temporal(lambs, events, colors = None, width = 10, dpi = 120):
+def plot_temporal(lambs, events, colors=None, width=10, dpi=120):
     """
     Plot λ(t) vs. time at a specified location
 
@@ -43,17 +43,17 @@ def plot_temporal(lambs, events, colors = None, width = 10, dpi = 120):
     y[0] = 0
     y[-1] = 1.8
 
-    markerline, stemline, baseline = ax1.stem(x, np.ones_like(y) * np.mean(lambs['GT']), label=f'Events',
-                                              linefmt='k1-', basefmt=' ')
-    plt.setp(stemline, linewidth = 1.25)
-    plt.setp(markerline, markersize = 7, color = 'yellow', markeredgecolor = 'black')
+    marker_line, stem_line, baseline = ax1.stem(x, np.ones_like(y) * np.mean(lambs['GT']), label=f'Events',
+                                                linefmt='k1-', basefmt=' ')
+    plt.setp(stem_line, linewidth=1.25)
+    plt.setp(marker_line, markersize=7, color='yellow', markeredgecolor='black')
     ax1.legend(loc='upper left', bbox_to_anchor=(0, 1))
-    markerline.set_visible(False)
-    stemline.set_visible(False)
+    marker_line.set_visible(False)
+    stem_line.set_visible(False)
 
-    markerline, stemline, baseline = ax2.stem(x, y, label=f'Events', linefmt='k1-', basefmt=' ')
-    plt.setp(stemline, linewidth = 1.25)
-    plt.setp(markerline, markersize = 7, color = 'yellow', markeredgecolor = 'black')
+    marker_line, stem_line, baseline = ax2.stem(x, y, label=f'Events', linefmt='k1-', basefmt=' ')
+    plt.setp(stem_line, linewidth=1.25)
+    plt.setp(marker_line, markersize=7, color='yellow', markeredgecolor='black')
     ax2.set_xlim([t_start, t_end])
     ax2.invert_yaxis()
     ax2.get_yaxis().set_visible(False)

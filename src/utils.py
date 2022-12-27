@@ -406,7 +406,7 @@ def arange(N, bound, lib: Any = np):
     for n in N:
         assert type(n) == int, "Number of data points must be an int"
         assert n >= 1, "Number of data points must be at least 1"
-        tick = lib.arange(0., 1. + 1. / n, 1. / n)
+        tick = lib.arange(0., 1. + 0.1 / n, 1. / n)  # Add a small number to include the upper bound
         ticks.append(tick)
     X = lib.meshgrid(*ticks)
     X = lib.vstack([X_.flatten() for X_ in X]).T
@@ -489,6 +489,15 @@ def scale_ll(dataloader, nll, sll, tll):
     t_scale = torch.log(t_scale)
     s_scale = torch.log(s0_scale * s1_scale)
     return nll + s_scale + t_scale, sll - s_scale, tll - t_scale
+
+
+def get_update_time(model_fn: str):
+    """
+    Given a model file, return the file's last update time
+
+    :param model_fn: the absolute/relative path to the model file
+    """
+    return datetime.fromtimestamp(os.path.getmtime(model_fn))
 
 
 if __name__ == '__main__':

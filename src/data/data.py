@@ -88,26 +88,22 @@ def pad_collate(batch):
     return seq_pads.unsqueeze(-1), seq_lens, t_last
 
 
-device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device("cpu")
-
-
-# device = torch.device("cpu")
-
-
 class SlidingWindowWrapper(torch.utils.data.Dataset):
     """
     Wrap data of a spatiotemporal point process
     """
 
-    def __init__(self, seqs, lookback=20, lookahead=1, normalized=False, roll=True, min=None, max=None):
+    def __init__(self, seqs, lookback=20, lookahead=1, normalized=False, roll=True, min=None, max=None, 
+                 device=torch.device("cuda:0")):
         """
         Take a batch of sequences, applying sliding window to each of it to create a
         fixed length dataset.
+        
+        st_X: torch.tensor, [N, lookback]
+        st_Y: torch.tensor, [N, lookahead]
 
-        seqs: list of [seqlen, 3] np.array
-
-        self.st_X: torch.tensor, [N, lookback]
-        self.st_Y: torch.tensor, [N, lookahead]
+        :param seqs: a list of sequences of np shape [N, 3], time is the first dimension
+        :param roll: whether to roll the time to the last dimension
         """
         self.seqs_cum = seqs
         self.seqs = deepcopy(self.seqs_cum)
@@ -117,11 +113,6 @@ class SlidingWindowWrapper(torch.utils.data.Dataset):
         if roll:
             self.seqs_cum = [np.roll(seq, -1, -1) for seq in self.seqs_cum]
             self.seqs = [np.roll(seq, -1, -1) for seq in self.seqs]
-
-        # print(self.seqs_cum[0][:10])
-        # print(self.seqs[0][:10])
-        # print(len(self.seqs[0]))
-        # print(len(self.seqs_cum[0]))
 
         self.st_X = []
         self.st_Y = []

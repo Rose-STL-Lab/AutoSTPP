@@ -330,7 +330,7 @@ class STSCPDataset(SyntheticDataset):
         g2_mats = np.zeros((num_point, num_point))
         for i, s in tqdm(enumerate(s_grids)):
             g2_cov = self.g2_cov / (gamma * np.sum(np.square(s - np.array([0.5, 0.5]))) + 1)
-            g2_mats[i] = self.g2(s_grids, s, 1 / np.sqrt(np.linalg.det(g2_cov)), np.linalg.inv(g2_cov))
+            g2_mats[i] = self.g2(s_grids, s, 1 / np.sqrt(np.linalg.det(g2_cov)), np.linalg.inv(g2_cov)).squeeze(-1)
             g2_mats[i] = g2_mats[i] / np.sum(g2_mats[i]) * x_num * y_num
 
         self.g0_mat, self.g2_mats = g0_mat, g2_mats
@@ -700,7 +700,8 @@ class STHPDataset(SyntheticDataset):
         ax2.invert_yaxis()
         ax2.legend()
         
-    def get_lamb_st(self, x_num, y_num, t_num, t_start, t_end):
+    def get_lamb_st(self, x_num, y_num, t_num, t_start, t_end, 
+                    x_min=None, x_max=None, y_min=None, y_max=None):
         """
         return STHP lamb_st for a given time range
         
@@ -716,8 +717,10 @@ class STHPDataset(SyntheticDataset):
 
         his_s = self.his_s[idx]
 
-        x_max, y_max = np.max(his_s, 0)
-        x_min, y_min = np.min(his_s, 0)
+        if x_max is None or y_max is None:
+            x_max, y_max = np.max(his_s, 0)
+        if x_min is None or y_min is None:
+            x_min, y_min = np.min(his_s, 0)
 
         x_range = arange(x_num - 1, [[x_min, x_max]]).squeeze(-1)
         y_range = arange(y_num - 1, [[y_min, y_max]]).squeeze(-1)
