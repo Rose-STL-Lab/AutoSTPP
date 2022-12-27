@@ -1,7 +1,7 @@
 import pytest
 
 from autoint_mlp import model, cuboid
-from conftest import get_params, relpath, update_params, log_config, put_result
+from conftest import get_params, relpath, update_params, log_config, wandb_init, wandb_discard
 
 Xa = 0.
 Xb = 3.
@@ -103,11 +103,15 @@ def trained_model(cuboid, dataloader, device, request):
     from loguru import logger
     import os
     import datetime
+    import wandb
+    from integration.autoint import Cuboid
 
-    model = cuboid
+    model: Cuboid = cuboid
+    logger.info(model)
     update_params('trained_model', request)
     model_fn = relpath('models') + '.pkl'
     log_config()
+    wandb_init(__file__)
 
     if not request.param['retrain']:  # try to use the previous trained model
         if os.path.exists(model_fn):
@@ -119,13 +123,14 @@ def trained_model(cuboid, dataloader, device, request):
             logger.info('Previous model not found. Retraining...')
 
     a = datetime.datetime.now()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
+    lr = request.param['lr']
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
     epoch = 0
     losses = []
     loss = torch.tensor(1.0)
 
-    while loss.item() > 5e-5:
+    while loss.item() > 5e-5 and epoch < 1500:
         current_loss = []
         epoch += 1
 
@@ -139,9 +144,20 @@ def trained_model(cuboid, dataloader, device, request):
 
             # Perform optimization
             optimizer.step()
+            
+            if request.param['project']:
+                model.project()
 
             # Print statistics
             current_loss.append(loss.item())
+            if loss.item() < 10.0:
+                wandb.log({'loss': loss.item()})
+            
+            if torch.isnan(loss):
+                id = wandb.run.id
+                wandb.finish()
+                wandb_discard(id)
+                raise ValueError('NaN loss')
 
         avg_loss = sum(current_loss) / len(current_loss)
         losses.append(avg_loss)
@@ -151,9 +167,9 @@ def trained_model(cuboid, dataloader, device, request):
         scheduler.step()
 
     b = datetime.datetime.now()
-    put_result('train_time_per_epoch', (b - a).total_seconds() / epoch)
-    put_result('n_epoch', epoch)
-    put_result('ending_loss', loss.item())
+    wandb.log({'final_loss': loss.item(), 
+               'number_of_epoch': epoch, 
+               'train_time_per_epoch': (b - a).total_seconds() / epoch})
 
     model.eval()
 
@@ -172,6 +188,7 @@ class TestClass:
     def plot(N, f_gt, f_pd, title, file_name):
         import numpy as np
         from visualization.plotter import plot_lambst_interactive
+        import wandb
 
         f_gt = f_gt.reshape((N + 1, N + 1, N + 1)).transpose([2, 0, 1])
         f_pd = f_pd.reshape((N + 1, N + 1, N + 1)).transpose([2, 0, 1])
@@ -181,7 +198,9 @@ class TestClass:
 
         fig = plot_lambst_interactive([f_gt, f_pd], x_range, y_range, t_range, show=False,
                                       master_title=title, subplot_titles=['Ground Truth', 'Predicted'])
-        fig.write_html(f"{relpath('figs', True)}/{file_name}.html")
+        html_fn = f"{relpath('figs', True)}/{file_name}.html"
+        fig.write_html(html_fn)
+        wandb.log({file_name: wandb.Html(html_fn)})
 
     @pytest.mark.skip(reason="No visualization")
     def test_integral_fit_fast(self, dataset, trained_model, device):
@@ -218,6 +237,7 @@ class TestClass:
         from tqdm import tqdm
         from loguru import logger
         from torch.utils.data import DataLoader
+        import wandb
 
         N = 50
         X = arange(N, [[Xa, Xb], [Ya, Yb], [Za, Zb]])
@@ -243,7 +263,7 @@ class TestClass:
 
         F_pd = np.concatenate(F_pd)
         logger.error(abs(F_gt - F_pd).mean())
-        put_result('integral_test_MSE', abs(F_gt - F_pd).mean())
+        wandb.log({'integral_test_MSE': abs(F_gt - F_pd).mean()})
 
         title = f'Learned integral by training with {pytest.fn_params["trained_model"]["loss_func"]}'
         self.plot(N, F_gt, F_pd, title, 'integral')
@@ -260,6 +280,7 @@ class TestClass:
         from utils import arange
         from loguru import logger
         from torch.utils.data import DataLoader
+        import wandb
 
         N = 50
         X = arange(N, [[Xa, Xb], [Ya, Yb], [Za, Zb]])
@@ -273,7 +294,7 @@ class TestClass:
         f_pd = np.concatenate(f_pd)
 
         logger.error(abs(f_gt - f_pd).mean())
-        put_result('integrant_test_MSE', abs(f_gt - f_pd).mean())
+        wandb.log({'integrant_test_MSE': abs(f_gt - f_pd).mean()})
 
         title = f'Learned integrant by training with {pytest.fn_params["trained_model"]["loss_func"]}'
         self.plot(N, f_gt, f_pd, title, 'integrant')

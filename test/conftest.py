@@ -6,14 +6,7 @@ from copy import deepcopy
 from utils import relpath_under, serialize_config
 import inspect
 import os
-
-
-@pytest.fixture(scope='session', autouse=True)
-def wandb():
-    import wandb
-    
-    wandb.init(mode='disabled')
-    # wandb.init(project=pytest.fn, entity="point-process")
+import wandb
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -34,9 +27,9 @@ def get_params(key: str, caller_fn: str = ''):
     fn = fn[fn.rindex('/') + 1:]
     logger.debug(f'Loading {key} config from configs/{fn}.yaml')
     configs: Dict[str, Dict[str, List]] = load_config(fn)
-    pytest.config[fn] = deepcopy(configs)
+    pytest.config[caller_fn] = deepcopy(configs)
 
-    for fixture_name in pytest.config[fn]:
+    for fixture_name in pytest.config[caller_fn]:
         if type(configs[fixture_name]) is not dict:  # Non-fixture parameters
             del configs[fixture_name]
             continue
@@ -49,7 +42,11 @@ def get_params(key: str, caller_fn: str = ''):
                 configs[fixture_name][config_name] = [configs[fixture_name][config_name]]   # Make it a list
 
     params = {fixture_name: dict_to_list(configs[fixture_name]) for fixture_name in configs}
-    return params[key]
+    try:
+        return params[key]
+    except KeyError:
+        logger.error(f'{fn} does not have config for {key}')
+        return []
 
 
 def pytest_configure():
@@ -112,6 +109,35 @@ def update_params(fixture_name: str, request) -> None:
             continue
         else:
             pytest.fn_params[fixture_name][key] = request.param[key]
+            
+            
+def wandb_init(caller_fn: str) -> None:
+    """
+    Init wandb, and upload the current fn_params (listed config params) and non-list config params to wandb
+    """
+    if wandb.run is not None:
+        wandb.finish()  # Finish previous run
+    config = pytest.config[caller_fn]
+    wandb_config = {}
+    for fixture_name in config:
+        for key in config[fixture_name]:
+            if type(config[fixture_name][key]) is list:
+                wandb_config[f'{key} ({fixture_name})'] = pytest.fn_params[fixture_name][key]
+            else:
+                wandb_config[f'{key} ({fixture_name})'] = config[fixture_name][key]
+                
+    # wandb.init(mode='disabled')
+    # wandb.init(project=pytest.fn, entity='point-process', config=wandb_config)
+    wandb.init(mode="disabled")
+    
+    
+def wandb_discard(id) -> None:
+    """
+    Discard the current wandb run
+    """
+    api = wandb.Api()
+    run = api.run(f"point-process/{pytest.fn}/{id}")
+    run.delete()
 
 
 def relpath(prefix: str, create_dir: bool = False) -> str:

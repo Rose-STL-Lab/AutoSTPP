@@ -10,10 +10,58 @@ from torch import nn, autograd
 from torch.nn import functional as F
 
 from utils import nested_stack, deprecated
+from loguru import logger
 
 patch_typeguard()
 batch = None  # Suppress PyCharm type warning
 
+
+class AddMixSequential(nn.Module):
+    
+    def __init__(self, *args):
+        super().__init__()
+        for arg in args:
+            assert isinstance(arg, MixSequential)
+        self.seq: List[MultSequential] = nn.ModuleList(args)
+        
+    def forward(self, x):
+        res = sum([seq(x) for seq in self.seq])
+        return res
+    
+    def dnforward(self, x, dim):
+        """
+        Calculate d(n)x / dx1 dx2 ... dxn as a summation of all submodules
+
+        :param x: (..., dim)
+        :param dims: unordered list [x1, x2, ..., xn], can be repetitive
+        :return: (..., dim), d(n)x / dx1 dx2 ... dxn
+        """
+        res = sum([seq.dnforward(x, dim) for seq in self.seq])
+        return res
+    
+    def project(self) -> None:
+        for seq in self.seq:
+            seq.project()
+            
+            
+class Neg(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+
+    @staticmethod
+    def forward(x):
+        return -x
+        
+
+class Re4U(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+
+    @staticmethod
+    def forward(x):
+        return torch.where(x > 0., x ** 4 / 24. + x ** 3 / 6. + x ** 2 / 2. + x, 
+                           torch.exp(x) - 1.)
+    
 
 class ReQU(nn.Module):
     def __init__(self):
@@ -23,18 +71,100 @@ class ReQU(nn.Module):
     def forward(x):
         return torch.where(x > 0., 0.125 * x ** 2 + 0.5 * x + np.log(2.),
                            torch.log(torch.exp(x) + torch.tensor(1.)))
+        
 
-
-class ReQUFlip(nn.Module):
+class LogInt(nn.Module):
     def __init__(self):
         super().__init__()  # init the base class
 
     @staticmethod
     def forward(x):
-        return -torch.where(x > 0., 0.125 * x ** 2 + 0.5 * x + np.log(2.),
-                            torch.log(torch.exp(x) + torch.tensor(1.)))
+        return torch.where(x > 1., x**3 / 36 + x**3 * torch.log(x) / 6 + 0.75 * x**2 + 11 * x / 12 + 1 / 72,
+                           torch.where(x > 0., x**4 / 24 + x**3 / 6 + x**2 / 2 + x,
+                                       torch.exp(x) - 1.))
 
 
+class ReflectExp(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+
+    @staticmethod
+    def forward(x):
+        return torch.where(x > 0., -torch.exp(-x) + x**2 + 1., torch.exp(x) - 1.)
+    
+    
+class ReflectExpShift(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+    
+    b = 0.5  # Shift bias
+
+    def forward(self, x):
+        b = ReflectExpShift.b
+        return torch.where(x > 0., -torch.exp(b - x) + (x - b)**2 + 2., 
+                           torch.exp(x - b)) - np.exp(-b) + 1.
+    
+    def dforward(self, f, x):
+        b = ReflectExpShift.b
+        return torch.where(x > 0., torch.exp(b - x) + (x - b) * 2, torch.exp(x - b))
+    
+    def d2forward(self, f, x):
+        b = ReflectExpShift.b
+        return torch.where(x > 0., -torch.exp(b - x) + 2, torch.exp(x - b))
+    
+    def d3forward(self, f, x):
+        b = ReflectExpShift.b
+        return torch.where(x > 0., torch.exp(b - x), torch.exp(x - b))
+    
+
+class ReflectExpInt(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+
+    @staticmethod
+    def forward(x):
+        return torch.where(x > 0., torch.exp(-x) + x**3 / 3. + 2 * x - 1., torch.exp(x) - 1.)
+
+
+class ReflectSoft(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+    
+    s = 0.8  # Scale factor
+
+    @staticmethod
+    def forward(x):
+        bias = 2 - np.sqrt(3.)
+        result = torch.where(x > 0., 
+                             (x * (x + 6) - 6 * torch.log(torch.exp(x) + bias)) / 6. + 2 * np.log(1 + bias), 
+                             torch.log(1 + torch.exp(x + np.log(bias))))
+        return ReflectSoft.s * result
+        
+    @staticmethod
+    def dforward(f, x):
+        bias = np.sqrt(3.) - 2
+        result = torch.where(x > 0., 
+                             bias * torch.exp(-x) / (bias * torch.exp(-x) - 1) + x / 3.,
+                             bias * torch.exp(x) / (bias * torch.exp(x) - 1))
+        return ReflectSoft.s * result
+        
+    @staticmethod
+    def d2forward(f, x):
+        bias = np.sqrt(3.) - 2
+        result = torch.where(x > 0., 
+                             (bias * torch.exp(-x) + 1)**2 / 4. / (bias * torch.exp(-x) - 1)**2 + 1 / 12.,
+                             -(bias * torch.exp(x) + 1)**2 / 4. / (bias * torch.exp(x) - 1)**2 + 1 / 4.) 
+        return ReflectSoft.s * result
+      
+    @staticmethod
+    def d3forward(f, x):
+        bias = np.log(2 - np.sqrt(3.))
+        result = torch.where(x > 0., 
+                             torch.exp(x - bias) * (torch.exp(x - bias) - 1) / (1 + torch.exp(x - bias))**3,
+                             -torch.exp(x + bias) * (torch.exp(x + bias) - 1) / (1 + torch.exp(x + bias))**3)
+        return ReflectSoft.s * result
+        
+        
 class Sine(nn.Module):
     def __init__(self):
         super().__init__()  # init the base class
@@ -42,15 +172,86 @@ class Sine(nn.Module):
     @staticmethod
     def forward(x):
         return torch.sin(x)
-
-
-class SineFlip(nn.Module):
+    
+    
+class PosMixSine(nn.Module):
     def __init__(self):
         super().__init__()  # init the base class
 
     @staticmethod
     def forward(x):
-        return - torch.sin(x)
+        assert x.shape[-1] == 3
+        # logger.critical(x[..., 0:1] * x[..., 1:2] * x[..., 2:3] / 3.)
+        return torch.sin(x) + x[..., 0:1] * x[..., 1:2] * x[..., 2:3] / 3.
+
+
+# Activation functions
+act_dict = {
+    "tanh": nn.Tanh(),
+    "sigmoid": nn.Sigmoid(),
+    "sine": Sine(),
+    "relu": nn.ReLU(),
+    "requ": ReQU(),
+    "elu": nn.ELU(),
+    "re4u": Re4U(),
+    "logint": LogInt(),
+    "reflectexp": ReflectExp(),
+    "reflectsoft": ReflectSoft(),
+    "reflectexpint": ReflectExpInt(),
+    "reflectexpshift": ReflectExpShift(),
+    "posmixsine": PosMixSine(),
+}
+
+# Derivative functions
+MAX_GRAD_DIM = 100
+# TODO: Implement this in respective classes
+grad_dict = {
+    'Tanh': [lambda f, _: 1 - f ** 2,
+             lambda f, _: -2 * f * (1 - f ** 2),
+             lambda f, _: 8 * f ** 2 - 6 * f ** 4 - 2,
+             lambda f, _: 24 * f ** 5 - 40 * f ** 3 + 16 * f],
+    'Sigmoid': [lambda f, _: f * (1 - f),
+                lambda f, _: 2 * f ** 3 - 3 * f ** 2 + f,
+                lambda f, _: - 6 * f ** 4 + 12 * f ** 3 - 7 * f ** 2 + f],
+    'Sine': [lambda _, x: torch.cos(x),
+             lambda f, _: -f,
+             lambda _, x: -torch.cos(x),
+             lambda f, _: f] * (MAX_GRAD_DIM // 4),
+    'ReQU': [lambda _, x: torch.where(x > 0., 0.25 * x + 0.5, 1. / (1. + torch.exp(-x))),
+             lambda _, x: torch.where(x > 0., 0.25 * torch.ones_like(x), torch.exp(-x) / (1 + torch.exp(-x)) ** 2),
+             lambda _, x: torch.where(x > 0., torch.zeros_like(x),
+                                      - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)],
+    'Softplus': [lambda _, x: torch.exp(0.5 * x) / (1. + torch.exp(0.5 * x)),
+                    lambda _, x: 0.5 * torch.exp(0.5 * x) / (1. + torch.exp(0.5 * x)) ** 2,
+                    lambda _, x: 0.25 * (torch.exp(0.5 * x) - torch.exp(x)) / (1. + torch.exp(0.5 * x)) ** 3],
+    'ELU': [lambda _, x: torch.where(x > 0., torch.ones_like(x), torch.exp(x))] + 
+           [lambda _, x: torch.where(x > 0., torch.zeros_like(x), torch.exp(x))] * MAX_GRAD_DIM,
+    'Re4U': [lambda _, x: torch.where(x > 0., x ** 3 / 6. + x ** 2 / 2. + x + 1., torch.exp(x)),
+                lambda _, x: torch.where(x > 0., x ** 2 / 2. + x + 1., torch.exp(x)),
+                lambda _, x: torch.where(x > 0., x + 1, torch.exp(x))],
+    'LogInt': [lambda _, x: torch.where(x > 1., 0.25 * x**2 + 0.5 * x**2 * torch.log(x) + 1.5 * x + 11. / 12,
+                                        torch.where(x > 0., x**3 / 6 + x**2 / 2 + x + 1., torch.exp(x))),
+                lambda _, x: torch.where(x > 1., torch.log(x) * x + x + 1.5,
+                                         torch.where(x > 0., x**2 / 2 + x + 1., torch.exp(x))),
+                lambda _, x: torch.where(x > 1., torch.log(x) + 2,
+                                         torch.where(x > 0., x + 1., torch.exp(x)))],
+    'ReflectExp': [lambda _, x: torch.where(x > 0., torch.exp(-x) + 2 * x, torch.exp(x)),
+                   lambda _, x: torch.where(x > 0., -torch.exp(-x) + 2, torch.exp(x)),
+                   lambda _, x: torch.where(x > 0., torch.exp(-x), torch.exp(x))],
+    'ReflectExpInt': [lambda _, x: torch.where(x > 0., -torch.exp(-x) + x**2 + 2, torch.exp(x)),
+                      lambda _, x: torch.where(x > 0., torch.exp(-x) + x * 2, torch.exp(x)),
+                      lambda _, x: torch.where(x > 0., -torch.exp(-x) + 2, torch.exp(x))],
+    'Neg': [lambda _, x: -torch.ones_like(x)] + 
+           [lambda _, x: torch.zeros_like(x)] * MAX_GRAD_DIM,
+    'ReLU': [lambda _, x: torch.where(x > 0., torch.ones_like(x), torch.zeros_like(x))] +
+            [lambda _, x: torch.zeros_like(x)] * MAX_GRAD_DIM,
+    'ReflectSoft': [ReflectSoft.dforward, ReflectSoft.d2forward, ReflectSoft.d3forward],
+    'ReflectExpShift': [ReflectExpShift.dforward, ReflectExpShift.d2forward, ReflectExpShift.d3forward],
+    'PosMixSine': [lambda _, x: torch.cos(x),
+                   lambda _, x: -torch.sin(x),
+                   lambda _, x: -torch.cos(x),
+                   lambda _, x: torch.sin(x)] * (MAX_GRAD_DIM // 4)
+}
 
 
 class MultSequential(nn.Sequential):
@@ -62,24 +263,7 @@ class MultSequential(nn.Sequential):
         self.x = None
         self.f = []
         self.dnf = {}
-
-    acDict = {  # activation derivative
-        'Tanh': [lambda f, _: 1 - f ** 2,
-                 lambda f, _: -2 * f * (1 - f ** 2),
-                 lambda f, _: 8 * f ** 2 - 6 * f ** 4 - 2,
-                 lambda f, _: 24 * f ** 5 - 40 * f ** 3 + 16 * f],
-        'Sigmoid': [lambda f, _: f * (1 - f),
-                    lambda f, _: 2 * f ** 3 - 3 * f ** 2 + f,
-                    lambda f, _: - 6 * f ** 4 + 12 * f ** 3 - 7 * f ** 2 + f],
-        'Sine': [lambda _, x: torch.cos(x),
-                 lambda f, _: -f,
-                 lambda _, x: -torch.cos(x),
-                 lambda f, _: f] * 25,
-        'ReQU': [lambda _, x: torch.where(x > 0., 0.25 * x + 0.5, 1. / (1. + torch.exp(-x))),
-                 lambda _, x: torch.where(x > 0., 0.25 * torch.ones_like(x), torch.exp(-x) / (1 + torch.exp(-x)) ** 2),
-                 lambda _, x: torch.where(x > 0., torch.zeros_like(x),
-                                          - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)]
-    }
+        self.grad_dict = grad_dict
 
     @staticmethod
     def hash(dims: List[int]) -> str:
@@ -178,6 +362,46 @@ class MultSequential(nn.Sequential):
         for j in range(1, m + 1):
             a[n - m + j] = j - 1
         return f(m, n, 0, n, a)
+    
+    def partition2(ns, b):
+        """
+        Finding ways to put n elements in b bins, allowing for empty bins
+
+        :param ns: a list of n elements
+        :param m: number of bins
+        :return: generate ways to put n elements in b bins
+        """
+        import numpy as np
+        import itertools
+        from copy import deepcopy
+        masks = np.identity(b, dtype=int)
+        for c in itertools.combinations_with_replacement(masks, len(ns)):
+            split = sum(c)
+
+            def draw(n, lst):
+                """
+                Ways to draw n numbers from lst
+                e.g. draw 2 from [1,2,3] = [[1,2], [1,3], [2,3]]
+                """
+                if n == 0:
+                    yield []
+                else:
+                    for i, x in enumerate(lst):
+                        for y in draw(n - 1, lst[i + 1:]):
+                            yield [x] + y
+            
+            res = [{'drawn': [], 'left': ns}]
+            for i, num_in_bin in enumerate(split):
+                while len(res[0]['drawn']) <= i:
+                    sample = res.pop(0)
+                    for drawn in draw(num_in_bin, sample['left']):
+                        left_ = deepcopy(sample['left'])
+                        drawn_ = deepcopy(sample['drawn'])
+                        for num in drawn:
+                            left_.remove(num)
+                        drawn_.append(drawn)
+                        res.append({'drawn': drawn_, 'left': left_})
+            yield [dic['drawn'] for dic in res]
 
     def reset(self) -> None:
         """
@@ -235,8 +459,8 @@ class MultSequential(nn.Sequential):
                 pd.append(pd[-1] @ nn.functional.relu(module.weight).T)
             elif tp == 'PadLinear':
                 pd.append(pd[-1] @ module.padded_weight().T)
-            elif tp in self.acDict: 
-                pd.append(self.acDict[tp][0](self.f[i + 1], self.f[i]) * pd[-1])
+            elif tp in self.grad_dict: 
+                pd.append(self.grad_dict[tp][0](self.f[i + 1], self.f[i]) * pd[-1])
             else:
                 raise NotImplementedError
         
@@ -282,19 +506,15 @@ class MultSequential(nn.Sequential):
                 pd.append(pd[-1] @ F.relu(module.weight).T)
             elif tp == 'PadLinear':
                 pd.append(pd[-1] @ module.padded_weight().T)
-            elif tp in self.acDict or tp[:-4] in self.acDict:
-                if flip := tp.endswith('Flip'):  # Whether add a negative sign
-                    tp = tp[:-4]
-                acs = self.acDict[tp]
-                flip = -1 if flip else 1
-
+            elif tp in self.grad_dict:
+                acs = self.grad_dict[tp]
                 if N == 1:
-                    term_sum = flip * acs[0](self.f[i + 1], self.f[i]) * pd[-1]  # Base case
+                    term_sum = acs[0](self.f[i + 1], self.f[i]) * pd[-1]  # Base case
                 else:
                     term_sum = 0.
-                    # ac(n)   * df/dx1 * df/dx2 * df/dx3 ... * df/dxn
+                    # ac(n)   * df/dx1 * df/dx2 * df/dx3 ... * df/dxn + 
                     # ...
-                    # ac''    * (d2f/dx1dx2.. * df/dxn + ... )
+                    # ac''    * (d2f/dx1dx2.. * df/dxn + ... ) +
                     # ac'     * dnf/dx1dx2dx3...dxn
                     # ways to partition x1...xn to k sets time ac(k)
                     for order in range(N):
@@ -308,12 +528,46 @@ class MultSequential(nn.Sequential):
                                     temp = temp * self.dnf[self.hash(list(dim))][i]
                                 term += temp
                         assert order < len(acs), "Activation high-order derivative not implemented"
-                        term_sum += term * flip * acs[order](self.f[i + 1], self.f[i])
+                        term_sum += term * acs[order](self.f[i + 1], self.f[i])
+                if tp == 'PosMixSine':  # Handle the + f(x)*f(y)*f(z) part
+                    # df1(x,y,z:X)f2(X)f3(X)/dx = 
+                    # df1'(X)/dx f2(X)f3(X) + f1(X) df2'(X)/dx f3(X) + f1(X)f2(X) df3'(X)/dx
+                    # When f1=x, f2=y, f3=z, df1'(X)/dx = 1, df2'(X)/dx = 0, df3'(X)/dx = 0
+                    # yz + 0xz + 0xy = yz
+                    
+                    # df1(X)f2(X)f3(X)/dxdy = 
+                    # df1(X)/dxdy f2(X) f3(X) + df1(X)/dx df2(X)/dy f3(X) + df1(X)/dx f2(X) df3(X)/dy +
+                    # df2(X)/dxdy f1(X) f3(X) + df1(X)/dy df2(X)/dx f3(X) + f1(X) df2(X)/dx df3(X)/dy +
+                    # df3(X)/dxdy f1(X) f2(X) + df1(X)/dy f2(X) df3(X)/dx + f1(X) df2(X)/dy df3(X)/dx
+                    # When f1=x, f2=y, f3=z, z
+                    
+                    # df1(X)f2(X)f3(X)/dxdydz
+                    # df1(X)/dxdydz f2(X) f3(X) + ...
+                    # When f1=x, f2=y, f3=z, 1
+                    f_term = self.f[i]
+                    for ways in MultSequential.partition2(dims, 3):
+                        for way in ways:
+                            temp = 1.
+                            assert len(way) == 3
+                            for j, dims_ in enumerate(way):
+                                if len(dims_) == 0:
+                                    temp = f_term[:, j:j + 1] * temp
+                                else:
+                                    df_term = self.dnf[self.hash(dims_)][i]
+                                    temp = df_term[:, j:j + 1] * temp
+                            term_sum += temp / 3.
                 pd.append(term_sum)
             else:
                 raise NotImplementedError
 
         return pd[-1]
+    
+    def project(self) -> None:
+        """Employ negative / non-negative constraint"""
+        with torch.no_grad():
+            for layer in self:
+                if isinstance(layer, nn.Linear) and not isinstance(layer, PadLinear):
+                    layer.weight.clamp_(min=0.0, max=None)
 
 
 class BaselineSequential(nn.Sequential):
@@ -342,6 +596,13 @@ class BaselineSequential(nn.Sequential):
         d2f = df(x)
         assert dims[-1] < x.shape[-1], "Deriving dimension exceeds input dimension"
         return autograd.grad(d2f, x, torch.ones_like(d2f), create_graph=True)[0][:, dims[-1:]]
+    
+    def project(self) -> None:
+        """Employ negative / non-negative constraint"""
+        with torch.no_grad():
+            for layer in self:
+                if isinstance(layer, nn.Linear) and not isinstance(layer, PadLinear):
+                    layer.weight.clamp_(min=0.0, max=None)
 
 
 class MixSequential(nn.Module):
@@ -375,20 +636,56 @@ class MixSequential(nn.Module):
             df = self.dnforward(x, dims[:-1])  # Derivative with one fewer order
 
         return autograd.grad(df, x, torch.ones_like(df), create_graph=True)[0][..., dims[-1:]]
+    
+    def project(self) -> None:
+        """Employ negative / non-negative constraint"""
+        self.layers.project()
 
 
 class PadLinear(nn.Linear):
-    def __init__(self, *args):
-        super().__init__(*args)
+    def __init__(self, in_features, out_features, bias=True, last_t=False):
+        """
+        Allowing an input feature to be unchanged by the linear layer 
+        and kept as an output feature
+        
+        :param in_features: number of input features
+        :param out_features: number of output features
+        :param bias: whether to use bias
+        :param last_t: whether the unchanged input feature is the first or the last
+        """
+        super().__init__(in_features, out_features, bias)
+        self.last_t = last_t
 
     def padded_weight(self):
-        weight = torch.eye(self.out_features + 1, self.in_features + 1).to(self.weight.device)
-        weight[1:, 1:] = self.weight
+        """
+        Return the weight matrix with a padded row and column
+        allowing a feature to be unchanged by the linear layer and kept as an output feature
+        
+        :return: a torch matrix of size (self.out_features + 1, self.in_features + 1)
+        """
+        weight = torch.zeros(self.out_features + 1, self.in_features + 1).to(self.weight.device)
+        if self.last_t:
+            weight[:-1, :-1] = self.weight
+            weight[-1, -1] = 1.
+        else:
+            weight[1:, 1:] = self.weight
+            weight[0, 0] = 1.
         return weight
 
     def padded_bias(self):
-        bias = torch.zeros(self.out_features + 1).to(self.bias.device)
-        bias[1:] = self.bias
+        """
+        Return the bias with a padded value
+        allowing a feature to be unchanged by the linear layer
+        
+        :return: a torch vector of size (self.out_features + 1)
+        """
+        bias = torch.zeros(self.out_features + 1).to(self.weight.device)
+        if self.bias is None:
+            return bias
+        if self.last_t:
+            bias[:-1] = self.bias
+        else:
+            bias[1:] = self.bias
         return bias
 
     # Override
@@ -413,12 +710,13 @@ class Cuboid(nn.Module):
             self.L = L
         else:
             self.L = MixSequential(nn.Linear(3, 128),
-                                   ReQUFlip(),
+                                   ReQU(),
                                    nn.Linear(128, 128),
-                                   ReQUFlip(),
+                                   ReQU(),
                                    nn.Linear(128, 128),
-                                   ReQUFlip(),
-                                   nn.Linear(128, 1)
+                                   ReQU(),
+                                   nn.Linear(128, 1),
+                                   Neg()
                                    )
         if M is not None:
             self.M = M
@@ -616,12 +914,5 @@ class Cuboid(nn.Module):
         """
         Clamp all layers' weights to non-negative.
         """
-        with torch.no_grad():
-            self.M.layers[0].weight.clamp_(min=0.0, max=None)
-            self.M.layers[2].weight.clamp_(min=0.0, max=None)
-            self.M.layers[4].weight.clamp_(min=0.0, max=None)
-            self.M.layers[6].weight.clamp_(min=0.0, max=None)
-            self.L.layers[0].weight.clamp_(min=None, max=0.0)
-            self.L.layers[2].weight.clamp_(min=None, max=0.0)
-            self.L.layers[4].weight.clamp_(min=None, max=0.0)
-            self.L.layers[6].weight.clamp_(min=None, max=0.0)
+        self.M.project()
+        self.L.project()

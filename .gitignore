@@ -104,3 +104,5 @@ notebooks/covid
 notebooks/deep-stpp
 *.zip
 wandb/
+
+.tmp*

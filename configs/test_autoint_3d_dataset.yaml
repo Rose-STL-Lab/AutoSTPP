@@ -1,15 +1,16 @@
 dataloader:
-  name: ['covid_nj_cases']
+  name: ['earthquakes_jp']
 model:
-  act: ['requ']
+  act: ['relu']
   n_layers: [3]
   hid_dim: [128]
   inp_dim: 3
   out_dim: 1
+  bias: true
 trained_model:
-  name: ['auto-stpp']
+  # name: ['auto-stpp', 'monte-carlo-stpp']
+  name: ['monte-carlo-stpp']
   lr: 0.0004
-  n_epoch: 20
+  n_epoch: 50
   n_eval_epoch: 5
-  gradient_clip: 1.0
-  retrain: false
+  retrain: true

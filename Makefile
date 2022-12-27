@@ -1,4 +1,4 @@
-.PHONY: clean data lint requirements sync_data_to_s3 sync_data_from_s3
+.PHONY: clean wandb data lint requirements sync_data_to_s3 sync_data_from_s3
 
 #################################################################################
 # GLOBALS                                                                       #
@@ -19,6 +19,16 @@ endif
 #################################################################################
 # COMMANDS                                                                      #
 #################################################################################
+
+## Toggle wandb
+wandb:
+	if grep -q "wandb.init(mode=\"disabled\")" test/conftest.py; then \
+		sed -i 's/wandb.init(mode="disabled")/wandb.init(project=pytest.fn, entity="point-process", config=wandb_config)/' test/conftest.py; \
+		echo "wandb enabled"; \
+	else \
+		sed -i 's/wandb.init(project=pytest.fn, entity="point-process", config=wandb_config)/wandb.init(mode="disabled")/' test/conftest.py; \
+		echo "wandb disabled"; \
+	fi
 
 ## Make Dataset
 data: test_environment

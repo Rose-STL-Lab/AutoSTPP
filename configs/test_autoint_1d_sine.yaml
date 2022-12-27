@@ -1,10 +1,12 @@
 dataloader:
   batch_size: [128]
 model:
-  act: ['tanh', 'sigmoid', 'sine', 'requflip', 'requ']
-  n_layers: [2, 3]
+  # act: ['tanh', 'sigmoid', 'sine', 'requflip', 'requ', 'elu', 'reflectexp']
+  act: ['reflectexp']
+  n_layers: [2]
   hid_dim: [128]
   inp_dim: 1
   out_dim: 1
+  bias: true
 trained_model:
-  retrain: false
+  retrain: true

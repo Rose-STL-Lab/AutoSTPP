@@ -1,16 +1,10 @@
 import pytest
 
 from autoint_mlp import model
-from conftest import relpath, update_params, get_params
+from conftest import relpath, update_params, get_params, log_config, wandb_init, wandb_discard
 
 Xa = 0.
 Xb = 6.
-
-
-@pytest.fixture(scope="class", autouse=True)
-def log(model, dataloader):
-    from loguru import logger
-    logger.info(pytest.fn_params)
 
 
 @pytest.fixture(
@@ -40,9 +34,13 @@ def trained_model(model, dataloader, device, request):
     from torch import nn
     import numpy as np
     from loguru import logger
+    import wandb
     import os
 
     model_fn = relpath('models') + '.pkl'
+    log_config()
+    wandb_init(__file__)
+    logger.info(model)
     if not request.param['retrain']:  # try to use the previous trained model
         if os.path.exists(model_fn):
             model.load_state_dict(torch.load(model_fn)['model_state_dict'])
@@ -53,12 +51,12 @@ def trained_model(model, dataloader, device, request):
             logger.info('Previous model not found. Retraining...')
 
     loss_func = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
     epoch = 0
     loss = torch.tensor(1.0)
 
-    while loss.item() > 1e-3:
+    while loss.item() > 1e-3 and epoch < 1500:
         current_loss = []
         epoch += 1
 
@@ -79,7 +77,7 @@ def trained_model(model, dataloader, device, request):
                    torch.square(model.dnforward(d2f_anchor, [0, 0])).sum() + \
                    torch.square(model.dnforward(df_anchor, [0])).sum() + \
                    torch.square(model(f_anchor)).sum()
-
+                   
             # Use buffer: 0.44 s per epoch -> 0.4 s
 
             # Perform backward pass
@@ -90,6 +88,14 @@ def trained_model(model, dataloader, device, request):
 
             # Print statistics
             current_loss.append(loss.item())
+            if loss.item() < 10.0:
+                wandb.log({'loss': loss.item()})
+            
+            if torch.isnan(loss):
+                id = wandb.run.id
+                wandb.finish()
+                wandb_discard(id)
+                raise ValueError('NaN loss')
 
         avg_loss = sum(current_loss) / len(current_loss)
         logger.debug(f'Epoch {epoch} \t Loss: {avg_loss}')
@@ -110,6 +116,7 @@ class TestClass:
     @staticmethod
     def plot(x, f_gt, f_pd, title, file_name):
         import plotly.graph_objects as go
+        import wandb
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=x, y=f_gt, mode='markers', name='ground truth'))
@@ -121,13 +128,16 @@ class TestClass:
             xaxis_title="x",
             yaxis_title="f",
         )
-
-        fig.write_html(f"{relpath('figs', True)}/{file_name}.html", include_mathjax=mathjax_link)
+        
+        html_fn = f"{relpath('figs', True)}/{file_name}.html"
+        fig.write_html(html_fn, include_mathjax=mathjax_link)
+        wandb.log({file_name: wandb.Html(html_fn)})
 
     def test_f(self, trained_model, device):
         import torch
         import numpy as np
         from loguru import logger
+        import wandb
 
         trained_model.eval()
 
@@ -140,12 +150,14 @@ class TestClass:
 
         diff = abs(f_pd - f_gt)
         logger.error(np.mean(diff))
+        wandb.log({'f(x) error': np.mean(diff)})
         assert np.mean(diff) < 0.05  # Assert the error is smaller than .05
 
     def test_1st_derivative(self, trained_model, device):
         import torch
         import numpy as np
         from loguru import logger
+        import wandb
 
         trained_model.eval()
 
@@ -158,12 +170,14 @@ class TestClass:
 
         diff = abs(f_pd - f_gt)
         logger.error(np.mean(diff))
+        wandb.log({'f\'(x) error': np.mean(diff)})
         assert np.mean(diff) < 0.05  # Assert the error is smaller than .05
 
     def test_2nd_derivative(self, trained_model, device):
         import torch
         import numpy as np
         from loguru import logger
+        import wandb
 
         trained_model.eval()
 
@@ -176,4 +190,5 @@ class TestClass:
 
         diff = abs(f_pd - f_gt)
         logger.error(np.mean(diff))
+        wandb.log({'f\'\'(x) error': np.mean(diff)})
         assert np.mean(diff) < 0.05  # Assert the error is smaller than .05

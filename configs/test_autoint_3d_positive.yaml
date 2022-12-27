@@ -3,11 +3,15 @@ dataloader:
   sampling_density: 1024
   regenerate: false
 model:
-  act: ['sine', 'requ']
-  n_layers: [2, 3]
-  hid_dim: [64, 128]
+  act: ['reflectexp']
+  # posmix: ['posmixsine']
+  n_layers: [2]  # [2, 3]
+  hid_dim: [128]  # [64, 128]
   inp_dim: 3
   out_dim: 1
+  bias: true
 trained_model:
-  retrain: false
-  loss_func: ['integral_mse_loss', 'gradient_mse_loss']
+  retrain: true
+  loss_func: ['gradient_mse_loss']  # ['integral_mse_loss', 'gradient_mse_loss']
+  lr: 0.005
+  project: true
