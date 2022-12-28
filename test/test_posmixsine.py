@@ -1,4 +1,24 @@
+"""
+Test the PosMixSine layer
+Motivation: force the mixed derivative (d/dx d/dy d/dz) to be positive 
+while the univariate derivative (d/dx d/dx d/dx) is unconstrained
+
+By adding a sin(x, y, z) + xyz layer (+1 after mixed derivative) at the beginning
+Why not intermediate: the input should be strictly x,y,z, if the input has undergone 
+some transformation (f(x),g(y),h(z)) then the mixed derivative can have a super negative
+term 1 and cause the total term to be negative.
+"""
+
+
 def test_sine_model():
+    """
+    Test the relationship between third derivative and first derivative
+    
+    f = sin(g(x,y,z))
+    f'''(x,y,z) = sin'''(g) * (g'(x) * g'(y) * g'(z)) 
+    
+    The last three terms are columns of linear matrix.
+    """
     from integration.autoint import MultSequential, Sine
     from torch import nn
     import torch
@@ -10,7 +30,6 @@ def test_sine_model():
     model_wo_sine = MultSequential(
         model[0]
     )
-    model[0].weight
     
     x = torch.tensor([[1., 1., 1.]])
 
@@ -30,6 +49,10 @@ def test_sine_model():
 
 
 def test_posmixsine():
+    """
+    Test the positivity of mixed derivative and 
+    the possible negativity of univariate derivative
+    """
     from integration.autoint import BaselineSequential, PosMixSine, ReflectExp
     from torch import nn
     import torch
@@ -45,9 +68,10 @@ def test_posmixsine():
             ReflectExp(),
             nn.Linear(128, 1)
         )
-        model[0].weight = nn.Parameter(torch.eye(3) * 2)
+        
         model.project()
-        from loguru import logger
+        # model[0].weight = nn.Parameter(torch.eye(3))
+        
         x = torch.rand([1, 3]) * 2
         try:
             assert model.dnforward(x, [0, 1, 2]) >= 0   # Positive
@@ -63,12 +87,15 @@ def test_posmixsine():
     
     
 def test_posmixsine_impl():
+    """
+    Test the implementation of PosMixSine 
+    (consistent derivative between our implementation and the autograd)
+    """
     from integration.autoint import BaselineSequential, MultSequential, ReflectExp, PosMixSine
     from torch import nn
     import torch
     
     model = BaselineSequential(
-        ReflectExp(),
         nn.Linear(3, 3),
         PosMixSine(),
         nn.Linear(3, 128),
@@ -91,6 +118,10 @@ def test_posmixsine_impl():
         
 
 def test_wo_posmix():
+    """
+    Test without the PosMixSine layer, the positivity of mixed derivative and
+    univariate derivative
+    """
     from integration.autoint import MultSequential, ReflectExp
     from torch import nn
     import torch
