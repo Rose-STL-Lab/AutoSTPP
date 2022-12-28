@@ -10,8 +10,17 @@ model:
   inp_dim: 3
   out_dim: 1
   bias: true
+cat_linear_model:
+  act: ['tanh']
+  n_layers: [2]
+  hid_dim: [64]
+  inp_dim: 1
+  out_dim: 1
+  num_group: 3
+  bias: true
 trained_model:
+  add_mixseq: true
   retrain: true
-  loss_func: ['gradient_mse_loss']  # ['integral_mse_loss', 'gradient_mse_loss']
-  lr: 0.005
+  loss_func: ['integral_mse_loss']  # ['integral_mse_loss', 'gradient_mse_loss']
+  lr: 0.01
   project: true

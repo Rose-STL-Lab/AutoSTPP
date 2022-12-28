@@ -1,6 +1,6 @@
 import pytest
 
-from autoint_mlp import model, cuboid
+from autoint_mlp import model, cuboid, cat_linear_model, add_cuboid
 from conftest import get_params, relpath, update_params, log_config, wandb_init, wandb_discard
 
 Xa = 0.
@@ -98,7 +98,7 @@ def gradient_mse_loss():
     scope="class",
     params=get_params('trained_model')
 )
-def trained_model(cuboid, dataloader, device, request):
+def trained_model(cuboid, add_cuboid, dataloader, device, request):
     import torch
     from loguru import logger
     import os
@@ -106,7 +106,10 @@ def trained_model(cuboid, dataloader, device, request):
     import wandb
     from integration.autoint import Cuboid
 
-    model: Cuboid = cuboid
+    if request.param['add_mixseq']:  # Use additive model
+        model: Cuboid = add_cuboid
+    else:
+        model: Cuboid = cuboid
     logger.info(model)
     update_params('trained_model', request)
     model_fn = relpath('models') + '.pkl'

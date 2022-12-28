@@ -1,0 +1,15 @@
+model:
+  act: ['reflectexp']
+  n_layers: [2]  # [2, 3]
+  hid_dim: [128]  # [64, 128]
+  inp_dim: 3
+  out_dim: 1
+  bias: true
+cat_linear_model:
+  act: ['tanh']
+  n_layers: [2]
+  hid_dim: [64]
+  inp_dim: 1
+  out_dim: 1
+  num_group: 3
+  bias: true

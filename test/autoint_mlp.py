@@ -32,10 +32,7 @@ def model(device, request):
     return MixSequential(*layers).to(device)
 
 
-@pytest.fixture(
-    scope="class",
-    params=get_params('cuboid', importer())  # The importer file name 
-)
+@pytest.fixture(scope="class")
 def cuboid(device, model):
     from torch.nn import Linear
     from integration.autoint import Cuboid
@@ -50,5 +47,69 @@ def cuboid(device, model):
             layers.append(layer)
     layers.append(Neg())
     L = MixSequential(*layers).to(device)
+
+    return Cuboid(L, M)
+
+
+@pytest.fixture(
+    scope="class",
+    params=get_params('cat_linear_model', importer())  # The importer file name 
+)
+def cat_linear_model(device, request):
+    # Load activation function
+    from integration.autoint import MixSequential, CatLinear, act_dict
+    from torch import nn
+    update_params("cat_linear_model", request)
+
+    act_layer = act_dict[request.param['act']]
+
+    # Construct MLP layers
+    assert request.param['n_layers'] >= 1
+    layers = [CatLinear(request.param['inp_dim'], request.param['hid_dim'], request.param['num_group'])]
+    for _ in range(request.param['n_layers'] - 1):
+        layers.append(act_layer)
+        layers.append(CatLinear(request.param['hid_dim'], request.param['hid_dim'], request.param['num_group'],
+                                bias=request.param['bias']))
+    layers.append(act_layer)
+    layers.append(CatLinear(request.param['hid_dim'], request.param['out_dim'], request.param['num_group'],
+                            bias=request.param['bias']))
+    layers.append(nn.Linear(request.param['num_group'] * request.param['out_dim'], request.param['out_dim'],
+                            bias=request.param['bias']))
+
+    return MixSequential(*layers).to(device)
+
+
+@pytest.fixture(scope="class")
+def add_cuboid(device, model, cat_linear_model):
+    from torch.nn import Linear
+    from integration.autoint import Cuboid, CatLinear
+    from integration.autoint import AddMixSequential, MixSequential, Neg
+
+    M = AddMixSequential(model, cat_linear_model)
+    model_layers = []
+    cat_linear_model_layers = []
+    for i, layer in enumerate(model.layers):
+        if isinstance(layer, Linear):
+            if isinstance(layer, CatLinear):
+                model_layers.append(CatLinear(layer.in_features, layer.out_features, 
+                                              layer.num_group))
+            else:
+                model_layers.append(layer.__class__(layer.in_features, layer.out_features))
+        else:
+            model_layers.append(layer)
+    model_layers.append(Neg())
+    for i, layer in enumerate(cat_linear_model.layers):
+        if isinstance(layer, Linear):
+            if isinstance(layer, CatLinear):
+                cat_linear_model_layers.append(CatLinear(layer.in_features, layer.out_features, 
+                                                         layer.num_group))
+            else:
+                cat_linear_model_layers.append(layer.__class__(layer.in_features, layer.out_features))
+        else:
+            cat_linear_model_layers.append(layer)
+    cat_linear_model_layers.append(Neg())
+    L0 = MixSequential(*model_layers).to(device)
+    L1 = MixSequential(*cat_linear_model_layers).to(device)
+    L = AddMixSequential(L0, L1)
 
     return Cuboid(L, M)
