@@ -1,5 +1,7 @@
 from itertools import combinations
 from typing import List, Generator
+import itertools
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -220,10 +222,13 @@ grad_dict = {
     'ReQU': [lambda _, x: torch.where(x > 0., 0.25 * x + 0.5, 1. / (1. + torch.exp(-x))),
              lambda _, x: torch.where(x > 0., 0.25 * torch.ones_like(x), torch.exp(-x) / (1 + torch.exp(-x)) ** 2),
              lambda _, x: torch.where(x > 0., torch.zeros_like(x),
-                                      - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3)],
+                                      - torch.exp(x) * (torch.exp(x) - 1.) / (1. + torch.exp(x)) ** 3),
+             lambda _, x: torch.where(x > 0., torch.zeros_like(x),
+                                      torch.exp(x) * (-4 * torch.exp(x) + torch.exp(2 * x) + 1) /
+                                      (1. + torch.exp(x)) ** 4)],
     'Softplus': [lambda _, x: torch.exp(0.5 * x) / (1. + torch.exp(0.5 * x)),
-                    lambda _, x: 0.5 * torch.exp(0.5 * x) / (1. + torch.exp(0.5 * x)) ** 2,
-                    lambda _, x: 0.25 * (torch.exp(0.5 * x) - torch.exp(x)) / (1. + torch.exp(0.5 * x)) ** 3],
+                 lambda _, x: 0.5 * torch.exp(0.5 * x) / (1. + torch.exp(0.5 * x)) ** 2,
+                 lambda _, x: 0.25 * (torch.exp(0.5 * x) - torch.exp(x)) / (1. + torch.exp(0.5 * x)) ** 3],
     'ELU': [lambda _, x: torch.where(x > 0., torch.ones_like(x), torch.exp(x))] + 
            [lambda _, x: torch.where(x > 0., torch.zeros_like(x), torch.exp(x))] * MAX_GRAD_DIM,
     'Re4U': [lambda _, x: torch.where(x > 0., x ** 3 / 6. + x ** 2 / 2. + x + 1., torch.exp(x)),
@@ -236,8 +241,9 @@ grad_dict = {
                 lambda _, x: torch.where(x > 1., torch.log(x) + 2,
                                          torch.where(x > 0., x + 1., torch.exp(x)))],
     'ReflectExp': [lambda _, x: torch.where(x > 0., torch.exp(-x) + 2 * x, torch.exp(x)),
-                   lambda _, x: torch.where(x > 0., -torch.exp(-x) + 2, torch.exp(x)),
-                   lambda _, x: torch.where(x > 0., torch.exp(-x), torch.exp(x))],
+                   lambda _, x: torch.where(x > 0., -torch.exp(-x) + 2, torch.exp(x))] +
+                  [lambda _, x: torch.where(x > 0., torch.exp(-x), torch.exp(x)),
+                   lambda _, x: torch.where(x > 0., -torch.exp(-x), torch.exp(x))] * (MAX_GRAD_DIM // 2),
     'ReflectExpInt': [lambda _, x: torch.where(x > 0., -torch.exp(-x) + x**2 + 2, torch.exp(x)),
                       lambda _, x: torch.where(x > 0., torch.exp(-x) + x * 2, torch.exp(x)),
                       lambda _, x: torch.where(x > 0., -torch.exp(-x) + 2, torch.exp(x))],
@@ -363,17 +369,15 @@ class MultSequential(nn.Sequential):
             a[n - m + j] = j - 1
         return f(m, n, 0, n, a)
     
-    def partition2(ns, b):
+    @staticmethod
+    def partition2(ns: List[int], b: int) -> Generator:
         """
         Finding ways to put n elements in b bins, allowing for empty bins
 
         :param ns: a list of n elements
-        :param m: number of bins
+        :param b: number of bins
         :return: generate ways to put n elements in b bins
         """
-        import numpy as np
-        import itertools
-        from copy import deepcopy
         masks = np.identity(b, dtype=int)
         for c in itertools.combinations_with_replacement(masks, len(ns)):
             split = sum(c)
@@ -506,6 +510,8 @@ class MultSequential(nn.Sequential):
                 pd.append(pd[-1] @ F.relu(module.weight).T)
             elif tp == 'PadLinear':
                 pd.append(pd[-1] @ module.padded_weight().T)
+            elif tp == 'CatLinear':
+                pd.append(pd[-1] @ module.cat_weight().T)
             elif tp in self.grad_dict:
                 acs = self.grad_dict[tp]
                 if N == 1:
@@ -545,7 +551,7 @@ class MultSequential(nn.Sequential):
                     # df1(X)/dxdydz f2(X) f3(X) + ...
                     # When f1=x, f2=y, f3=z, 1
                     f_term = self.f[i]
-                    for ways in MultSequential.partition2(dims, 3):
+                    for ways in self.partition2(dims, 3):
                         for way in ways:
                             temp = 1.
                             assert len(way) == 3
@@ -566,7 +572,12 @@ class MultSequential(nn.Sequential):
         """Employ negative / non-negative constraint"""
         with torch.no_grad():
             for layer in self:
-                if isinstance(layer, nn.Linear) and not isinstance(layer, PadLinear):
+                if isinstance(layer, PadLinear):
+                    pass  # No need to clamp because t is "leaked"
+                elif isinstance(layer, CatLinear):
+                    for weight in layer.weights:
+                        weight.clamp_(min=0.0, max=None)
+                elif isinstance(layer, nn.Linear):
                     layer.weight.clamp_(min=0.0, max=None)
 
 
@@ -601,7 +612,12 @@ class BaselineSequential(nn.Sequential):
         """Employ negative / non-negative constraint"""
         with torch.no_grad():
             for layer in self:
-                if isinstance(layer, nn.Linear) and not isinstance(layer, PadLinear):
+                if isinstance(layer, PadLinear):
+                    pass  # No need to clamp because t is "leaked"
+                elif isinstance(layer, CatLinear):
+                    for weight in layer.weights:
+                        weight.clamp_(min=0.0, max=None)
+                elif isinstance(layer, nn.Linear):
                     layer.weight.clamp_(min=0.0, max=None)
 
 
@@ -691,6 +707,60 @@ class PadLinear(nn.Linear):
     # Override
     def forward(self, X):
         return F.linear(X, self.padded_weight(), self.padded_bias())
+    
+    
+class CatLinear(nn.Linear):
+    def __init__(self, in_features, out_features, num_group, bias=True, last_t=False):
+        """
+        Let all input features not to interact with input features in other groups
+        and the output features are the concatenation of all groups' outputs
+        
+        :param in_features: number of input features in each group
+        :param out_features: number of output features (dim will be multiplied by in_features)
+        :param num_group: number of groups
+        :param bias: whether to use bias
+        :param last_t: whether the unchanged input feature is the first or the last
+        """
+        super().__init__(in_features, out_features, bias)
+        self.weights = nn.ParameterList([nn.Parameter(deepcopy(self.weight)) 
+                                         for _ in range(num_group)])
+        self.weight = None
+        if bias:
+            self.biases = nn.ParameterList([nn.Parameter(deepcopy(self.bias)) 
+                                            for _ in range(num_group)])
+            self.bias = None  # Nullify the unused weight and bias
+        self.num_group = num_group
+        self.last_t = last_t
+
+    def cat_weight(self):
+        """
+        Return the weight matrix as a concatenation of all groups' weight matrices
+        
+        :return: a torch matrix of size (out_features * num_group, self.in_features * num_group)
+        """
+        weight = torch.zeros(self.out_features * self.num_group, self.in_features * self.num_group)
+        weight = weight.to(self.weights[0].device)
+        for i in range(self.num_group):
+            weight[self.out_features * i:self.out_features * (i + 1), 
+                   self.in_features * i:self.in_features * (i + 1)] = self.weights[i]
+        return weight
+
+    def cat_bias(self):
+        """
+        Return the bias vector as a concatenation of all groups' bias vector
+        
+        :return: a torch vector of size (out_features * num_group)
+        """
+        if self.bias is None:
+            return None
+        bias = torch.zeros(self.out_features * self.num_group).to(self.weights[0].device)
+        for i in range(self.num_group):
+            bias[self.out_features * i:self.out_features * (i + 1)] = self.biases[i]
+        return bias
+
+    # Override
+    def forward(self, X):
+        return F.linear(X, self.cat_weight(), self.cat_bias())
 
 
 class NonNegLinear(nn.Linear):
