@@ -48,7 +48,7 @@ class MonteCarloSTPPSameInfluence(nn.Module):
         lambs_sum = torch.sum(lambs, -1) + torch.exp(self.background)  # sum up all events' influence
 
         ########## Calculate temporal intensity ############
-        N = 10
+        N = 100
         rand_locs = torch.rand([N, *s_x.shape]).to(self.device) - s_x  # Random locations centered at s_x
         inp = torch.cat((rand_locs, t_diff.unsqueeze(0).unsqueeze(-1).repeat(N, 1, 1, 1)), -1)
         lamb_t = self.f.forward(inp).mean(0).squeeze(-1)
@@ -92,7 +92,7 @@ class MonteCarloSTPPSameInfluence(nn.Module):
 
 def calc_lamb(model, test_loader, device, scales=np.ones(3), biases=np.zeros(3),
               t_nstep=201, x_nstep=101, y_nstep=101, round_time=True,
-              xmax=None, xmin=None, ymax=None, ymin=None):
+              xmax=None, xmin=None, ymax=None, ymin=None, start_idx=2, trunc=False):
     """
     Calculate the uniformly sampled spatiotemporal intensity with a given
     number of spatiotemporal steps  
@@ -106,7 +106,7 @@ def calc_lamb(model, test_loader, device, scales=np.ones(3), biases=np.zeros(3),
     st_y_cums = []
     for data in test_loader:
         st_x, st_y, st_x_cum, st_y_cum, (idx, _) = data
-        mask = idx == 2  # Get the 3rd sequence only
+        mask = idx == start_idx  # Get the 3rd sequence only
         st_xs.append(st_x[mask])
         st_ys.append(st_y[mask])
         st_x_cums.append(st_x_cum[mask])
@@ -166,6 +166,11 @@ def calc_lamb(model, test_loader, device, scales=np.ones(3), biases=np.zeros(3),
         st_x_ = deepcopy(his_st_cum_)
         st_x_[1:, -1] = torch.diff(st_x_[:, -1])
         st_x_ = (st_x_ - torch.tensor(biases).to(device)) / torch.tensor(scales).to(device)  # History events (scaled)
+        
+        # Truncate the history events
+        if trunc:
+            his_st_cum_ = his_st_cum_[-20:]
+            st_x_ = st_x_[-20:]
         
         s_diff = s_grids.T.unsqueeze(-1) - st_x_[:, :-1].T.unsqueeze(-2)  # Spatial difference
         s_diff = s_diff.permute([1, 2, 0])  # [len(s_grids), len(his_st_cum_), 2]

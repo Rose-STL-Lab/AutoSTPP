@@ -1,7 +1,11 @@
 dataloader:
-  name: ['earthquakes_jp']
+  # name: ['sthp0', 'sthp1', 'sthp2', 'stscp0', 'stscp1', 'stscp2', 'covid_nj_cases', 'earthquakes_jp']
+  # name: ['earthquakes_jp']
+  name: ['covid_nj_cases']
+  # name: ['earthquakes_jp', 'covid_nj_cases']
+  # name: ['stscp0']
 model:
-  act: ['relu']
+  act: ['tanh']
   n_layers: [3]
   hid_dim: [128]
   inp_dim: 3
@@ -9,8 +13,13 @@ model:
   bias: true
 trained_model:
   # name: ['auto-stpp', 'monte-carlo-stpp']
-  name: ['monte-carlo-stpp']
-  lr: 0.0004
-  n_epoch: 50
+  name: ['weight-auto-stpp']
+  # name: ['weight-auto-stpp', 'monte-carlo-stpp']
+  # name: ['monte-carlo-stpp']
+  # name: ['deep-stpp']
+  lr: 0.004
+  n_epoch: 150
   n_eval_epoch: 5
   retrain: true
+  n_kernel: 2
+  n_prodnet: 2
