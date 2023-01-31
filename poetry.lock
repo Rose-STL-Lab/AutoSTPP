@@ -148,6 +148,14 @@ python-versions = ">=3.7"
 test = ["pytest (>=6)"]
 
 [[package]]
+name = "ffmpeg"
+version = "1.4"
+description = "ffmpeg python package url [https://github.com/jiashaokun/ffmpeg]"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "flake8"
 version = "5.0.4"
 description = "the modular source code checker: pep8 pyflakes and co"
@@ -982,7 +990,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "flake8 (<5)", "pytest-co
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "c06f085ea2c000661139131ac044f1b4927ad601d30be69050a55471b454ad00"
+content-hash = "164ce9a5206d835ce97f508da2e1fb567af513b81050ecd4f19baa70b8abb610"
 
 [metadata.files]
 alabaster = []
@@ -999,6 +1007,7 @@ cycler = []
 docker-pycreds = []
 docutils = []
 exceptiongroup = []
+ffmpeg = []
 flake8 = []
 fonttools = []
 gitdb = []

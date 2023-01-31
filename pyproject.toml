@@ -36,6 +36,7 @@ pytest = "~=7.2.0"
 pandas = "^1.5.2"
 rose-colormap = "1.0.0"
 wandb = "^0.13.7"
+ffmpeg = "^1.4"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
