@@ -20,6 +20,7 @@ def get_predict(model):
 
         :param his_t: np array [seqlen,], the event time history
         :param x: np array [N,], a batch of times
+        :return:  np array [N, 1], the intensities at different time
         """
         def predict(model, his_t, x):
             def lamb_func(t, his_t):
@@ -45,8 +46,8 @@ def get_predict(model):
                 delta_t = t - his_t[his_t < t]
                 if len(delta_t) == 0:
                     return model.background.item()
-                lamb_t = sum(model.F.dforward(torch.tensor(delta_t).float().unsqueeze(-1).to(device), 0).squeeze() *
-                             alphas[:len(delta_t)]) + model.background
+                term = model.F.dforward(torch.tensor(delta_t).float().unsqueeze(-1).to(device), 0).squeeze()
+                lamb_t = sum(term * alphas[:len(delta_t)]) + model.background
                 return lamb_t.item()
             
             y = np.array([lamb_func(t, his_t) for t in x])

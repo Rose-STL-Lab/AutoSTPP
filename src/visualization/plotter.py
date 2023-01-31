@@ -10,6 +10,7 @@ from utils import relpath_under
 from scipy.stats import multivariate_normal
 from plotly.subplots import make_subplots
 from rose_colormap.plotly import rose_vivid
+from rose_colormap import rose_vivid as rose_vivid_matplotlib
 
 
 def visualize_diff(outputs, targets, portion=1., fn=None):
@@ -93,7 +94,7 @@ def inverse_transform(x_range, y_range, t_range, scaler):
 
 
 def plot_lambst_static(lambs, x_range, y_range, t_range, fps, scaler=None, cmin=None, cmax=None,
-                       history=None, decay=0.3, base_size=300, cmap='magma', fn='result.mp4'):
+                       history=None, decay=0.3, base_size=300, cmap=rose_vivid_matplotlib, fn='result.mp4'):
     """
     The result could be saved as file with command `ani.save('file_name.mp4', writer='ffmpeg', fps=fps)`
                                         or command `ani.save('file_name.gif', writer='imagemagick', fps=fps)`
@@ -122,6 +123,7 @@ def plot_lambst_static(lambs, x_range, y_range, t_range, fps, scaler=None, cmin=
     fig = plt.figure(figsize=(6, 6), dpi=150)
     ax = fig.add_subplot(111, projection='3d', xlabel='x', ylabel='y', zlabel='λ', zlim=(cmin, cmax),
                          title='Spatio-temporal Conditional Intensity')
+    ax.set_box_aspect([1, 1, 1])
     ax.title.set_position([.5, .95])
     text = ax.text(min(x_range), min(y_range), cmax, "t={:.2f}".format(t_range[0]), fontsize=10)
     plot = [ax.plot_surface(grid_x, grid_y, lambs[0], rstride=1, cstride=1, cmap=cmap)]
@@ -159,7 +161,7 @@ def plot_lambst_static(lambs, x_range, y_range, t_range, fps, scaler=None, cmin=
 
 
 def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_range, cmin=None, cmax=None,
-                            scaler=None, heatmap=False, colorscale=rose_vivid, show=True,
+                            scaler=None, heatmap=False, colorscale=rose_vivid, show=True, cauto=False,
                             master_title='Spatio-temporal Conditional Intensity', subplot_titles=None):
     """
     :param lambs:   3D Array-like sampled intensities of shape (t_range, x_range, y_range)
@@ -208,16 +210,18 @@ def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_ra
             for j, lamb_st_i in enumerate(lamb_st):
                 if heatmap:
                     data.append(go.Heatmap(z=lamb_st_i, x=x_range, y=y_range, zmin=cmin, zmax=cmax,
-                                           colorscale=colorscale))
+                                           colorscale=colorscale, cauto=cauto))
                 else:
                     data.append(go.Surface(z=lamb_st_i, x=x_range, y=y_range, cmin=cmin, cmax=cmax,
-                                           colorscale=colorscale))
+                                           colorscale=colorscale, cauto=cauto))
             frames.append(go.Frame(data=data, name="{:.2f}".format(t_range[i])))
         else:
             if heatmap:
-                data = go.Heatmap(z=lamb_st, x=x_range, y=y_range, zmin=cmin, zmax=cmax, colorscale=colorscale)
+                data = go.Heatmap(z=lamb_st, x=x_range, y=y_range, zmin=cmin, zmax=cmax, 
+                                  colorscale=colorscale, cauto=cauto)
             else:
-                data = go.Surface(z=lamb_st, x=x_range, y=y_range, cmin=cmin, cmax=cmax, colorscale=colorscale)
+                data = go.Surface(z=lamb_st, x=x_range, y=y_range, cmin=cmin, cmax=cmax, 
+                                  colorscale=colorscale, cauto=cauto)
             frames.append(go.Frame(data=data, name="{:.2f}".format(t_range[i])))
 
     if n_subplot != 1:
@@ -236,15 +240,17 @@ def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_ra
         for j, lamb_st_i in enumerate(lambs[0]):
             if heatmap:
                 fig.add_trace(go.Heatmap(z=lamb_st_i, x=x_range, y=y_range, zmin=cmin, zmax=cmax,
-                                         colorscale=colorscale), row=1, col=j + 1)
+                                         colorscale=colorscale, cauto=cauto), row=1, col=j + 1)
             else:
                 fig.add_trace(go.Surface(z=lamb_st_i, x=x_range, y=y_range, cmin=cmin, cmax=cmax,
-                                         colorscale=colorscale), row=1, col=j + 1)
+                                         colorscale=colorscale, cauto=cauto), row=1, col=j + 1)
     else:
         if heatmap:
-            fig.add_trace(go.Heatmap(z=lambs[0], x=x_range, y=y_range, zmin=cmin, zmax=cmax, colorscale=colorscale))
+            fig.add_trace(go.Heatmap(z=lambs[0], x=x_range, y=y_range, zmin=cmin, zmax=cmax, 
+                                     colorscale=colorscale, cauto=cauto))
         else:
-            fig.add_trace(go.Surface(z=lambs[0], x=x_range, y=y_range, cmin=cmin, cmax=cmax, colorscale=colorscale))
+            fig.add_trace(go.Surface(z=lambs[0], x=x_range, y=y_range, cmin=cmin, cmax=cmax, 
+                                     colorscale=colorscale, cauto=cauto))
 
     # Slider
     sliders = [
@@ -267,7 +273,10 @@ def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_ra
     fig.update_scenes(  # Control zaxis for all subplots
         aspectmode='cube',
         zaxis_title='λ',
-        zaxis=dict(range=[cmin, cmax], autorange=False)
+        zaxis=dict(range=[cmin, cmax], autorange=False),
+        # camera=dict(
+        #     eye=dict(x=1, y=-1.73205, z=1.15470)
+        # )
     )
 
     # Layout

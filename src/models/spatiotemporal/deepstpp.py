@@ -296,7 +296,7 @@ class DeepSTPP(nn.Module):
 
 def calc_lamb(model, test_loader, config, device, scales=np.ones(3), biases=np.zeros(3),
               t_nstep=201, x_nstep=101, y_nstep=101, round_time=True,
-              xmax=None, xmin=None, ymax=None, ymin=None):
+              xmax=None, xmin=None, ymax=None, ymin=None, start_idx=2, trunc=None):
     """
     Calculate the uniformly sampled spatiotemporal intensity with a given
     number of spatiotemporal steps  
@@ -308,7 +308,7 @@ def calc_lamb(model, test_loader, config, device, scales=np.ones(3), biases=np.z
     st_y_cums = []
     for data in test_loader:
         st_x, st_y, st_x_cum, st_y_cum, (idx, _) = data
-        mask = idx == 2  # Get the 3rd sequence only
+        mask = idx == start_idx  # Get the 3rd sequence only
         st_xs.append(st_x[mask])
         st_ys.append(st_y[mask])
         st_x_cums.append(st_x_cum[mask])
