@@ -1,4 +1,5 @@
 dataloader:
+  name: 'sine' # 'sine'
   batch_size: [128]
   sampling_density: 1024
   regenerate: false
@@ -19,8 +20,8 @@ cat_linear_model:
   num_group: 3
   bias: true
 trained_model:
-  add_mixseq: true
+  add_mixseq: false
   retrain: true
-  loss_func: ['integral_mse_loss']  # ['integral_mse_loss', 'gradient_mse_loss']
-  lr: 0.01
+  loss_func: ['gradient_mse_loss']  # ['integral_mse_loss', 'gradient_mse_loss']
+  lr: 0.005
   project: true
