@@ -53,6 +53,19 @@ class Neg(nn.Module):
     @staticmethod
     def forward(x):
         return -x
+
+
+class PointReflect(nn.Module):
+    def __init__(self, shape: int, func):
+        super().__init__()  # init the base class
+        assert shape % 2 == 0
+        self.shape = shape
+        self.func = func
+
+    def forward(self, x):
+        assert x.shape[-1] == self.shape
+        half = self.shape // 2
+        return torch.cat([self.func(x[..., :half]), -self.func(-x[..., half:])], -1)
         
 
 class Re4U(nn.Module):
@@ -185,6 +198,112 @@ class PosMixSine(nn.Module):
         assert x.shape[-1] == 3
         # logger.critical(x[..., 0:1] * x[..., 1:2] * x[..., 2:3] / 3.)
         return torch.sin(x) + x[..., 0:1] * x[..., 1:2] * x[..., 2:3] / 3.
+
+
+class Prod(nn.Module):
+    def __init__(self):
+        super().__init__()  # init the base class
+
+    @staticmethod
+    def forward(x):
+        assert x.shape[-1] == 3
+        # logger.critical(x[..., 0:1] * x[..., 1:2] * x[..., 2:3] / 3.)
+        return x[..., 0:1] * x[..., 1:2] * x[..., 2:3] / 3.
+    
+    
+class SumNet(nn.Module):
+    def __init__(self, *args):
+        super().__init__()
+        self.nets = nn.ModuleList([])
+        for net in args:
+            assert isinstance(net, nn.Module)
+            assert hasattr(net, 'forward')
+            assert hasattr(net, 'dnforward')
+            self.nets.append(net)
+            
+    def forward(self, x):
+        result = 0.
+        for net in self.nets:
+            result += net.forward(x)
+        return result
+    
+    def dnforward(self, x, dims):
+        result = 0.
+        for net in self.nets:
+            result += net.dnforward(x, dims)
+        return result
+    
+    def project(self):
+        for net in self.nets:
+            net.project()
+
+
+class ProdNet(nn.Module):
+    def __init__(self, neg=False, bias=True, inp_dim=1, out_dim=1):
+        
+        super().__init__()  # init the base class
+        self.out_dim = out_dim
+        self.x_seq = MultSequential(
+            nn.Linear(inp_dim, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, out_dim, bias)
+        )
+        
+        self.y_seq = MultSequential(
+            nn.Linear(inp_dim, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, out_dim, bias)
+        )
+
+        self.t_seq = MultSequential(
+            nn.Linear(inp_dim, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, out_dim, bias)
+        )
+        
+        if neg:
+            self.x_seq.append(Neg())
+            self.y_seq.append(Neg())
+            self.t_seq.append(Neg())
+        
+    def dnforward(self, x, dims):
+        to_prod = []
+        n_count = dims.count(0)
+        if n_count > 0:
+            to_prod.append(self.x_seq.dnforward(x[..., 0:1], [0] * n_count))
+        else:
+            to_prod.append(self.x_seq(x[..., 0:1]))
+        n_count = dims.count(1)
+        if n_count > 0:
+            to_prod.append(self.y_seq.dnforward(x[..., 1:2], [0] * n_count))
+        else:
+            to_prod.append(self.y_seq(x[..., 1:2]))
+        n_count = dims.count(2)
+        if n_count > 0:
+            to_prod.append(self.t_seq.dnforward(x[..., 2:3], [0] * n_count))
+        else:
+            to_prod.append(self.t_seq(x[..., 2:3]))
+        return to_prod[0] * to_prod[1] * to_prod[2]
+        # assert dims == [0, 1, 2]
+        # return self.x_seq.dnforward(x[..., 0:1], [0]) * \
+        #     self.y_seq.dnforward(x[..., 1:2], [0]) * \
+        #     self.t_seq.dnforward(x[..., 2:3], [0])
+            
+    def forward(self, x):
+        return self.x_seq(x[..., 0:1]) * \
+            self.y_seq(x[..., 1:2]) * \
+            self.t_seq(x[..., 2:3])
+        
+    def project(self):
+        self.x_seq.project()
+        self.y_seq.project()
+        self.t_seq.project()
 
 
 # Activation functions
@@ -512,6 +631,21 @@ class MultSequential(nn.Sequential):
                 pd.append(pd[-1] @ module.padded_weight().T)
             elif tp == 'CatLinear':
                 pd.append(pd[-1] @ module.cat_weight().T)
+            elif tp == 'Prod':
+                term = 0.
+                f_term = self.f[i]
+                for ways in self.partition2(dims, 3):
+                    for way in ways:
+                        temp = 1.
+                        assert len(way) == 3
+                        for j, dims_ in enumerate(way):
+                            if len(dims_) == 0:
+                                temp = f_term[:, j:j + 1] * temp
+                            else:
+                                df_term = self.dnf[self.hash(dims_)][i]
+                                temp = df_term[:, j:j + 1] * temp
+                        term += temp / 3.
+                pd.append(term)
             elif tp in self.grad_dict:
                 acs = self.grad_dict[tp]
                 if N == 1:
@@ -612,7 +746,9 @@ class BaselineSequential(nn.Sequential):
         """Employ negative / non-negative constraint"""
         with torch.no_grad():
             for layer in self:
-                if isinstance(layer, PadLinear):
+                if hasattr(layer, 'dnforward'):
+                    layer.project()
+                elif isinstance(layer, PadLinear):
                     pass  # No need to clamp because t is "leaked"
                 elif isinstance(layer, CatLinear):
                     for weight in layer.weights:
