@@ -1,6 +1,6 @@
 import pytest
 
-from autoint_mlp import model, cuboid, cat_linear_model, add_cuboid
+from autoint_mlp import model, cuboid, sum_prodnet_cuboid
 from conftest import get_params, relpath, update_params, log_config, wandb_init, wandb_discard
 
 
@@ -117,37 +117,17 @@ def gradient_mse_loss():
     scope="class",
     params=get_params('trained_model')
 )
-def trained_model(cuboid, add_cuboid, dataloader, device, request):
+def trained_model(sum_prodnet_cuboid, dataloader, device, request):
     import torch
     from loguru import logger
     import os
     import datetime
     import wandb
+    import shutil
     from integration.autoint import Cuboid
 
-    if request.param['add_mixseq']:  
-        # Use additive model
-        model: Cuboid = add_cuboid
-    else:
-        model: Cuboid = cuboid
-        
-    from integration.autoint import MixSequential, BaselineSequential, CatLinear, ReflectExp, ReflectSoft, Neg
-    from integration.autoint import MultSequential, PointReflect, Prod, ProdNet, SumNet
-    import torch.nn as nn
-    
-    model = Cuboid(
-        L=SumNet(
-            ProdNet(inp_dim=1, out_dim=1, bias=True, neg=True),
-            ProdNet(inp_dim=1, out_dim=1, bias=True, neg=True),
-            ProdNet(inp_dim=1, out_dim=1, bias=True, neg=True)
-        ),
-        M=SumNet(
-            ProdNet(inp_dim=1, out_dim=1, bias=True),
-            ProdNet(inp_dim=1, out_dim=1, bias=True),
-            ProdNet(inp_dim=1, out_dim=1, bias=True)
-        )
-    ).to(device)
-    
+    assert len(sum_prodnet_cuboid) == 1
+    model: Cuboid = sum_prodnet_cuboid[0].to(device)
     model.train()
         
     logger.info(model)
@@ -221,6 +201,9 @@ def trained_model(cuboid, add_cuboid, dataloader, device, request):
         'optimizer_state_dict': optimizer.state_dict(),
         'scheduler_state_dict': scheduler.state_dict(),
     }, model_fn)
+    
+    if isinstance(wandb.run, wandb.sdk.wandb_run.Run):
+        shutil.copy(model_fn, f'{model_fn[:-4]}-{wandb.run.name}.pkl')
 
     return model
 

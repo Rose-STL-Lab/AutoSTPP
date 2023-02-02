@@ -8,19 +8,21 @@ model:
   # posmix: ['posmixsine']
   n_layers: [2]  # [2, 3]
   hid_dim: [128]  # [64, 128]
-  inp_dim: 3
-  out_dim: 1
-  bias: true
-cat_linear_model:
-  act: ['tanh']
-  n_layers: [2]
-  hid_dim: [64]
   inp_dim: 1
   out_dim: 1
-  num_group: 3
   bias: true
+# cat_linear_model:
+#   act: ['tanh']
+#   n_layers: [2]
+#   hid_dim: [64]
+#   inp_dim: 1
+#   out_dim: 1
+#   num_group: 3
+#   bias: true
+sum_prodnet_cuboid:
+  n_kernel: 1 # number of cuboids to generate
+  n_prodnet: 2
 trained_model:
-  add_mixseq: false
   retrain: true
   loss_func: ['gradient_mse_loss']  # ['integral_mse_loss', 'gradient_mse_loss']
   lr: 0.005

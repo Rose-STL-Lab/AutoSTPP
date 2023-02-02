@@ -113,3 +113,20 @@ def add_cuboid(device, model, cat_linear_model):
     L = AddMixSequential(L0, L1)
 
     return Cuboid(L, M)
+
+
+@pytest.fixture(
+    scope="class",
+    params=get_params('sum_prodnet_cuboid', importer())  # The importer file name 
+)
+def sum_prodnet_cuboid(device, request):
+    import torch
+    from integration.autoint import Cuboid, ProdNet, SumNet
+    
+    cuboids = torch.nn.ModuleList([])
+    for _ in range(request.param['n_kernel']):
+        L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True) 
+                        for _ in range(request.param['n_prodnet'])]
+        M_prod_nets = [ProdNet(out_dim=1, bias=True) for _ in range(request.param['n_prodnet'])]
+        cuboids.append(Cuboid(L=SumNet(*L_prod_nets), M=SumNet(*M_prod_nets)).to(device))
+    return cuboids

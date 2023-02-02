@@ -207,8 +207,19 @@ class Prod(nn.Module):
     @staticmethod
     def forward(x):
         assert x.shape[-1] == 3
-        # logger.critical(x[..., 0:1] * x[..., 1:2] * x[..., 2:3] / 3.)
         return x[..., 0:1] * x[..., 1:2] * x[..., 2:3] / 3.
+    
+    
+class Scale(nn.Module):
+    def __init__(self, weight=1., bias=0.):
+        super().__init__()
+        assert isinstance(weight, float)
+        assert isinstance(bias, float)
+        self.weight = weight
+        self.bias = bias
+    
+    def forward(self, x):
+        return self.weight * x + self.bias
     
     
 class SumNet(nn.Module):
@@ -239,12 +250,12 @@ class SumNet(nn.Module):
 
 
 class ProdNet(nn.Module):
-    def __init__(self, neg=False, bias=True, inp_dim=1, out_dim=1):
+    def __init__(self, neg=False, bias=True, out_dim=1):
         
         super().__init__()  # init the base class
         self.out_dim = out_dim
         self.x_seq = MultSequential(
-            nn.Linear(inp_dim, 128, bias),
+            nn.Linear(1, 128, bias),
             nn.Tanh(),
             nn.Linear(128, 128, bias),
             nn.Tanh(),
@@ -252,7 +263,7 @@ class ProdNet(nn.Module):
         )
         
         self.y_seq = MultSequential(
-            nn.Linear(inp_dim, 128, bias),
+            nn.Linear(1, 128, bias),
             nn.Tanh(),
             nn.Linear(128, 128, bias),
             nn.Tanh(),
@@ -260,7 +271,7 @@ class ProdNet(nn.Module):
         )
 
         self.t_seq = MultSequential(
-            nn.Linear(inp_dim, 128, bias),
+            nn.Linear(1, 128, bias),
             nn.Tanh(),
             nn.Linear(128, 128, bias),
             nn.Tanh(),
@@ -273,32 +284,97 @@ class ProdNet(nn.Module):
             self.t_seq.append(Neg())
         
     def dnforward(self, x, dims):
-        to_prod = []
+        prod = None
         n_count = dims.count(0)
         if n_count > 0:
-            to_prod.append(self.x_seq.dnforward(x[..., 0:1], [0] * n_count))
+            prod = self.x_seq.dnforward(x[..., 0:1], [0] * n_count)
         else:
-            to_prod.append(self.x_seq(x[..., 0:1]))
+            prod = self.x_seq(x[..., 0:1])
         n_count = dims.count(1)
         if n_count > 0:
-            to_prod.append(self.y_seq.dnforward(x[..., 1:2], [0] * n_count))
+            prod *= self.y_seq.dnforward(x[..., 1:2], [0] * n_count)
         else:
-            to_prod.append(self.y_seq(x[..., 1:2]))
+            prod *= self.y_seq(x[..., 1:2])
         n_count = dims.count(2)
         if n_count > 0:
-            to_prod.append(self.t_seq.dnforward(x[..., 2:3], [0] * n_count))
+            prod *= self.t_seq.dnforward(x[..., 2:3], [0] * n_count)
         else:
-            to_prod.append(self.t_seq(x[..., 2:3]))
-        return to_prod[0] * to_prod[1] * to_prod[2]
-        # assert dims == [0, 1, 2]
-        # return self.x_seq.dnforward(x[..., 0:1], [0]) * \
-        #     self.y_seq.dnforward(x[..., 1:2], [0]) * \
-        #     self.t_seq.dnforward(x[..., 2:3], [0])
+            prod *= self.t_seq(x[..., 2:3])
+        return prod
             
     def forward(self, x):
         return self.x_seq(x[..., 0:1]) * \
             self.y_seq(x[..., 1:2]) * \
             self.t_seq(x[..., 2:3])
+        
+    def project(self):
+        self.x_seq.project()
+        self.y_seq.project()
+        self.t_seq.project()
+        
+        
+class CatNet(nn.Module):
+    def __init__(self, neg=False, bias=True):
+        
+        super().__init__()  # init the base class
+        # Always 3 -> 3
+        self.x_seq = MultSequential(
+            nn.Linear(1, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 1, bias)
+        )
+        
+        self.y_seq = MultSequential(
+            nn.Linear(1, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 1, bias)
+        )
+
+        self.t_seq = MultSequential(
+            nn.Linear(1, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 128, bias),
+            nn.Tanh(),
+            nn.Linear(128, 1, bias)
+        )
+        
+        if neg:
+            self.x_seq.append(Neg())
+            self.y_seq.append(Neg())
+            self.t_seq.append(Neg())
+        
+    def dnforward(self, x, dims):
+        to_cat = []
+        n_count = dims.count(0)
+        if len(dims) > n_count:
+            to_cat.append(torch.zeros_like(x[..., 0:1]))
+        elif n_count > 0:
+            to_cat.append(self.x_seq.dnforward(x[..., 0:1], [0] * n_count))
+        else:
+            to_cat.append(self.x_seq(x[..., 0:1]))
+        n_count = dims.count(1)
+        if len(dims) > n_count:
+            to_cat.append(torch.zeros_like(x[..., 0:1]))
+        elif n_count > 0:
+            to_cat.append(self.y_seq.dnforward(x[..., 1:2], [0] * n_count))
+        else:
+            to_cat.append(self.y_seq(x[..., 1:2]))
+        n_count = dims.count(2)
+        if len(dims) > n_count:
+            to_cat.append(torch.zeros_like(x[..., 0:1]))
+        elif n_count > 0:
+            to_cat.append(self.t_seq.dnforward(x[..., 2:3], [0] * n_count))
+        else:
+            to_cat.append(self.t_seq(x[..., 2:3]))
+        return torch.cat(to_cat, dim=-1)
+            
+    def forward(self, x):
+        return torch.cat([self.x_seq(x[..., 0:1]), self.y_seq(x[..., 1:2]), 
+                          self.t_seq(x[..., 2:3])], dim=-1)
         
     def project(self):
         self.x_seq.project()
@@ -623,7 +699,14 @@ class MultSequential(nn.Sequential):
 
         for i, module in enumerate(self):
             tp = type(module).__name__
-            if tp == 'Linear':
+            if hasattr(module, 'dnforward'):
+                if i == 0:
+                    pd.append(module.dnforward(x, dims))
+                else:
+                    raise NotImplementedError('Other AutoInt model can only be the first layer')
+            elif tp == 'Scale':
+                pd.append(pd[-1] * module.weight)
+            elif tp == 'Linear':
                 pd.append(pd[-1] @ module.weight.T)
             elif tp == 'NonNegLinear':
                 pd.append(pd[-1] @ F.relu(module.weight).T)
@@ -632,6 +715,22 @@ class MultSequential(nn.Sequential):
             elif tp == 'CatLinear':
                 pd.append(pd[-1] @ module.cat_weight().T)
             elif tp == 'Prod':
+                """
+                df1(x,y,z:X)f2(X)f3(X)/dx = 
+                df1'(X)/dx f2(X)f3(X) + f1(X) df2'(X)/dx f3(X) + f1(X)f2(X) df3'(X)/dx
+                When f1=x, f2=y, f3=z, df1'(X)/dx = 1, df2'(X)/dx = 0, df3'(X)/dx = 0
+                yz + 0xz + 0xy = yz
+                
+                df1(X)f2(X)f3(X)/dxdy = 
+                df1(X)/dxdy f2(X) f3(X) + df1(X)/dx df2(X)/dy f3(X) + df1(X)/dx f2(X) df3(X)/dy +
+                df2(X)/dxdy f1(X) f3(X) + df1(X)/dy df2(X)/dx f3(X) + f1(X) df2(X)/dx df3(X)/dy +
+                df3(X)/dxdy f1(X) f2(X) + df1(X)/dy f2(X) df3(X)/dx + f1(X) df2(X)/dy df3(X)/dx
+                When f1=x, f2=y, f3=z, z
+                
+                df1(X)f2(X)f3(X)/dxdydz
+                df1(X)/dxdydz f2(X) f3(X) + ...
+                When f1=x, f2=y, f3=z, 1
+                """
                 term = 0.
                 f_term = self.f[i]
                 for ways in self.partition2(dims, 3):
@@ -652,11 +751,13 @@ class MultSequential(nn.Sequential):
                     term_sum = acs[0](self.f[i + 1], self.f[i]) * pd[-1]  # Base case
                 else:
                     term_sum = 0.
-                    # ac(n)   * df/dx1 * df/dx2 * df/dx3 ... * df/dxn + 
-                    # ...
-                    # ac''    * (d2f/dx1dx2.. * df/dxn + ... ) +
-                    # ac'     * dnf/dx1dx2dx3...dxn
-                    # ways to partition x1...xn to k sets time ac(k)
+                    """
+                    ac(n)   * df/dx1 * df/dx2 * df/dx3 ... * df/dxn + 
+                    ...
+                    ac''    * (d2f/dx1dx2.. * df/dxn + ... ) +
+                    ac'     * dnf/dx1dx2dx3...dxn
+                    ways to partition x1...xn to k sets time ac(k)
+                    """
                     for order in range(N):
                         if order == 0:
                             term = pd[-1]
@@ -670,20 +771,6 @@ class MultSequential(nn.Sequential):
                         assert order < len(acs), "Activation high-order derivative not implemented"
                         term_sum += term * acs[order](self.f[i + 1], self.f[i])
                 if tp == 'PosMixSine':  # Handle the + f(x)*f(y)*f(z) part
-                    # df1(x,y,z:X)f2(X)f3(X)/dx = 
-                    # df1'(X)/dx f2(X)f3(X) + f1(X) df2'(X)/dx f3(X) + f1(X)f2(X) df3'(X)/dx
-                    # When f1=x, f2=y, f3=z, df1'(X)/dx = 1, df2'(X)/dx = 0, df3'(X)/dx = 0
-                    # yz + 0xz + 0xy = yz
-                    
-                    # df1(X)f2(X)f3(X)/dxdy = 
-                    # df1(X)/dxdy f2(X) f3(X) + df1(X)/dx df2(X)/dy f3(X) + df1(X)/dx f2(X) df3(X)/dy +
-                    # df2(X)/dxdy f1(X) f3(X) + df1(X)/dy df2(X)/dx f3(X) + f1(X) df2(X)/dx df3(X)/dy +
-                    # df3(X)/dxdy f1(X) f2(X) + df1(X)/dy f2(X) df3(X)/dx + f1(X) df2(X)/dy df3(X)/dx
-                    # When f1=x, f2=y, f3=z, z
-                    
-                    # df1(X)f2(X)f3(X)/dxdydz
-                    # df1(X)/dxdydz f2(X) f3(X) + ...
-                    # When f1=x, f2=y, f3=z, 1
                     f_term = self.f[i]
                     for ways in self.partition2(dims, 3):
                         for way in ways:
@@ -698,7 +785,7 @@ class MultSequential(nn.Sequential):
                             term_sum += temp / 3.
                 pd.append(term_sum)
             else:
-                raise NotImplementedError
+                raise NotImplementedError(f"Unknown layer type: {tp}")
 
         return pd[-1]
     

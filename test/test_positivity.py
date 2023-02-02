@@ -32,52 +32,85 @@ def prodnet():
     from integration.autoint import SumNet, ProdNet
     
     model = SumNet(
-        ProdNet(inp_dim=1, out_dim=1, bias=True),
-        ProdNet(inp_dim=1, out_dim=1, bias=True),
-        ProdNet(inp_dim=1, out_dim=1, bias=True)
+        ProdNet(out_dim=1, bias=True),
+        ProdNet(out_dim=1, bias=True),
+        ProdNet(out_dim=1, bias=True)
     )
     model.project()
     return model
 
 
-def composite_prodnet():
+def seq_prodnets1():
+    from integration.autoint import BaselineSequential, MultSequential, ProdNet, ReflectExp
     from torch import nn
-    from integration.autoint import SumNet, ProdNet, ReflectExp, MultSequential
     
-    # model = SumNet(
-    #     MultSequential(
-    #         ProdNet(inp_dim=1, out_dim=128, bias=False),
-    #         ReflectExp(),
-    #         nn.Linear(128, 1)
-    #     ),
-    #     MultSequential(
-    #         ProdNet(inp_dim=1, out_dim=128, bias=True)
-    #     )
-    # )
-    model = MultSequential(
-        ProdNet(inp_dim=1, out_dim=128, bias=False),
+    model = BaselineSequential(
+        ProdNet(out_dim=128, bias=False),
         ReflectExp(),
         nn.Linear(128, 1)
     )
+    ours = MultSequential(*model)
     model.project()
-    return model
+    return model, ours
+
+
+# def seq_prodnets2():
+#     from integration.autoint import BaselineSequential, MultSequential, ProdNet
+#     from torch import nn
+    
+#     model = BaselineSequential(
+#         nn.Linear(3, 3),
+#         ProdNet(out_dim=128, bias=False),
+#         nn.Linear(128, 1)
+#     )
+#     ours = MultSequential(*model)
+#     model.project()
+#     return model, ours
+
+
+def composite_prodnets():
+    from torch import nn
+    from integration.autoint import SumNet, ProdNet, ReflectExp, MultSequential, BaselineSequential
+    
+    model = SumNet(
+        BaselineSequential(
+            ProdNet(out_dim=128, bias=False),
+            ReflectExp(),
+            nn.Linear(128, 1)
+        ),
+        BaselineSequential(
+            ProdNet(out_dim=1, bias=True)
+        )
+    )
+    ours = SumNet(MultSequential(*model.nets[0]), MultSequential(*model.nets[1]))    
+    model.project()
+    return model, ours
 
 
 def test_composite_impl():
     """
-    Test implementation of the composite
+    Test implementation of ours vs baseline
     """
     import torch
     
-    model, ours = composite_models()
-    x = torch.rand(2, 3)
-    
-    assert torch.allclose(model.dnforward(x, [0, 1, 2]), ours.dnforward(x, [0, 1, 2]))
-    assert torch.allclose(model.dnforward(x, [0, 1]), ours.dnforward(x, [0, 1]))
-    assert torch.allclose(model.dnforward(x, [0]), ours.dnforward(x, [0]))
-    assert torch.allclose(model.dnforward(x, [0, 2]), ours.dnforward(x, [0, 2]))
-    assert torch.allclose(model.dnforward(x, [1, 1]), ours.dnforward(x, [1, 1]))
-    assert torch.allclose(model.dnforward(x, [2, 2]), ours.dnforward(x, [2, 2]))
+    for model, ours in [seq_prodnets1(), composite_models(), composite_prodnets()]:
+        x = torch.rand(2, 3)
+        
+        # from loguru import logger
+        # logger.critical(f'[0, 1, 2]: {model.dnforward(x, [0, 1, 2])}, {ours.dnforward(x, [0, 1, 2])}')
+        # logger.critical(f'[0, 1]: {model.dnforward(x, [0, 1])}, {ours.dnforward(x, [0, 1])}')
+        # logger.critical(f'[0]: {model.dnforward(x, [0])}, {ours.dnforward(x, [0])}')
+        # logger.critical(f'[0, 2]: {model.dnforward(x, [0, 2])}, {ours.dnforward(x, [0, 2])}')
+        # logger.critical(f'[1, 1]: {model.dnforward(x, [1, 1])}, {ours.dnforward(x, [1, 1])}')
+        # logger.critical(f'[1]: {model.dnforward(x, [1])}, {ours.dnforward(x, [1])}')
+        # logger.error(ours.pd)
+        
+        assert torch.allclose(model.dnforward(x, [0, 1, 2]), ours.dnforward(x, [0, 1, 2]))
+        assert torch.allclose(model.dnforward(x, [0, 1]), ours.dnforward(x, [0, 1]))
+        assert torch.allclose(model.dnforward(x, [0]), ours.dnforward(x, [0]))
+        assert torch.allclose(model.dnforward(x, [0, 2]), ours.dnforward(x, [0, 2]))
+        assert torch.allclose(model.dnforward(x, [1, 1]), ours.dnforward(x, [1, 1]))
+        assert torch.allclose(model.dnforward(x, [2, 2]), ours.dnforward(x, [2, 2]))
     
     
 def test_prodnet_impl():
@@ -95,6 +128,30 @@ def test_prodnet_impl():
     assert torch.allclose(real, pred)
     
     
+def test_cmp_catnet_prodnet():
+    """
+    Compare prodnet and catnet
+    """
+    import torch
+    from integration.autoint import ProdNet, CatNet, MultSequential, Prod, Scale
+    prodnet = ProdNet(out_dim=1, bias=True)
+    catnet = CatNet(bias=True)
+    catnet.x_seq = prodnet.x_seq
+    catnet.y_seq = prodnet.y_seq
+    catnet.t_seq = prodnet.t_seq
+    catnet = MultSequential(catnet, Prod(), Scale(3.))
+        
+    # Test equivalence 
+    x = torch.rand(2, 3)
+    assert torch.allclose(prodnet.forward(x), catnet.forward(x))
+    assert torch.allclose(prodnet.dnforward(x, [0, 1, 2]), catnet.dnforward(x, [0, 1, 2]))
+    assert torch.allclose(prodnet.dnforward(x, [0, 1]), catnet.dnforward(x, [0, 1]))
+    assert torch.allclose(prodnet.dnforward(x, [0]), catnet.dnforward(x, [0]))
+    assert torch.allclose(prodnet.dnforward(x, [0, 2]), catnet.dnforward(x, [0, 2]))
+    assert torch.allclose(prodnet.dnforward(x, [1, 1]), catnet.dnforward(x, [1, 1]))
+    assert torch.allclose(prodnet.dnforward(x, [2, 2]), catnet.dnforward(x, [2, 2]))
+    
+    
 def test_composite():
     """
     Test the positivity of mixed derivative and 
@@ -106,10 +163,10 @@ def test_composite():
     neg_dims = [[0], [1], [2], [0, 1], [0, 2], [1, 2], [0, 0], [1, 1], [2, 2],
                 [0, 1, 0], [1, 2, 1], [2, 0, 2]]
     flags = {}
-    for _ in range(100):
-        # model = composite_models()[0]
-        # model = prodnet()
-        model = composite_prodnet()
+    for _ in range(200):
+        # model = composite_models()[1]
+        model = prodnet()
+        # model = composite_prodnets()[1]
         
         # model[0].weight = nn.Parameter(torch.eye(3))
         

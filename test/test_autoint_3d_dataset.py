@@ -83,18 +83,18 @@ def trained_model(model, cuboid, dataloader, device, request):
         lr = 0.004
     
     if model_name == 'auto-stpp':
-        L_prod_nets = [ProdNet(inp_dim=1, out_dim=1, bias=True, neg=True) 
+        L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True) 
                         for _ in range(request.param['n_prodnet'])]
-        M_prod_nets = [ProdNet(inp_dim=1, out_dim=1, bias=True) for _ in range(request.param['n_prodnet'])]
+        M_prod_nets = [ProdNet(out_dim=1, bias=True) for _ in range(request.param['n_prodnet'])]
         cuboid = Cuboid(L=SumNet(*L_prod_nets), M=SumNet(*M_prod_nets)).to(device)
         model = AutoIntSTPPSameInfluence(cuboid, device=device)
         
     elif model_name == 'weight-auto-stpp':
         cuboids = torch.nn.ModuleList([])
         for _ in range(request.param['n_kernel']):
-            L_prod_nets = [ProdNet(inp_dim=1, out_dim=1, bias=True, neg=True) 
+            L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True) 
                            for _ in range(request.param['n_prodnet'])]
-            M_prod_nets = [ProdNet(inp_dim=1, out_dim=1, bias=True) for _ in range(request.param['n_prodnet'])]
+            M_prod_nets = [ProdNet(out_dim=1, bias=True) for _ in range(request.param['n_prodnet'])]
             cuboids.append(Cuboid(L=SumNet(*L_prod_nets), M=SumNet(*M_prod_nets)).to(device))
         model = WeightedAutoIntSTPPSameInfluence(cuboids, device=device)
         
