@@ -1,12 +1,12 @@
-name: autoint
+name: autoint-stpp
 channels:
   - pytorch
   - conda-forge
+  - nvidia
 dependencies:
-  - python=3.9.*  # or don't specify the version and use the latest stable Python
-  - mamba
+  - python=3.10.* 
   - pip
   - poetry=1.*
-  - pytorch::pytorch=1.12.1
-platforms:
-  - linux-64
+  - conda-lock=1.*
+  - pytorch::pytorch=1.13.*
+  - pytorch::pytorch-cuda=11.*

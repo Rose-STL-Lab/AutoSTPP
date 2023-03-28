@@ -1,4 +1,4 @@
-.PHONY: clean wandb data lint requirements sync_data_to_s3 sync_data_from_s3
+.PHONY: delete_aim_run clean run_cuboid run_stpp wandb data lint requirements sync_data_to_s3 sync_data_from_s3
 
 #################################################################################
 # GLOBALS                                                                       #
@@ -9,6 +9,10 @@ BUCKET = [OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')
 PROFILE = default
 PROJECT_NAME = autoint
 PYTHON_INTERPRETER = python3
+export PYTHONPATH = src
+
+run_cuboid:
+	python src/experiment/run_cuboid.py -c configs/lightning/prodnet_cuboid_sine.yaml
 
 ifeq (,$(shell which conda))
 HAS_CONDA=False

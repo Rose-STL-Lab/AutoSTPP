@@ -22,6 +22,7 @@ model:
 sum_prodnet_cuboid:
   n_kernel: 1 # number of cuboids to generate
   n_prodnet: 2
+  composite: true
 trained_model:
   retrain: true
   loss_func: ['gradient_mse_loss']  # ['integral_mse_loss', 'gradient_mse_loss']

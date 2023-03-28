@@ -87,6 +87,21 @@ def composite_prodnets():
     return model, ours
 
 
+def composite_catnet():
+    from torch import nn
+    from integration.autoint import MultSequential, CatNet, Prod, ReflectExp
+    
+    model = MultSequential(
+        CatNet(),
+        nn.Linear(3, 3),
+        # Prod(),
+        ReflectExp(),
+        nn.Linear(3, 1)
+    )
+    model.project()
+    return model
+
+
 def test_composite_impl():
     """
     Test implementation of ours vs baseline
@@ -169,6 +184,40 @@ def test_composite():
         # model = composite_prodnets()[1]
         
         # model[0].weight = nn.Parameter(torch.eye(3))
+        
+        x = torch.rand([1, 3]) * 2
+        x = abs(x)  # Assume input is always positive
+        
+        dims = [0, 1, 2]
+        dnf = model.dnforward(x, dims)
+        logger.debug(f'f^{dims}: {dnf}')
+        assert dnf >= 0., f'f^{dims} is sometimes negative (should be always positive)'
+        
+        for dims in neg_dims:
+            if str(dims) not in flags:
+                flags[str(dims)] = False
+            dnf = model.dnforward(x, dims)
+            logger.debug(f'f^{dims}: {dnf}')
+            if dnf < 0:
+                flags[str(dims)] = True
+            
+    for dims in flags:
+        assert flags[str(dims)], f'f^{dims} is always positive (should be sometimes negative)'
+
+
+def test_composite_catnet():
+    """
+    Test the positivity of mixed derivative and 
+    the possible negativity of univariate derivative
+    """
+    import torch
+    from loguru import logger
+    
+    neg_dims = [[0, 1], [0, 2], [1, 2], [0, 0], [1, 1], [2, 2],
+                [0, 1, 0], [1, 2, 1], [2, 0, 2]]
+    flags = {}
+    for _ in range(1000):
+        model = composite_catnet()
         
         x = torch.rand([1, 3]) * 2
         x = abs(x)  # Assume input is always positive

@@ -121,12 +121,19 @@ def add_cuboid(device, model, cat_linear_model):
 )
 def sum_prodnet_cuboid(device, request):
     import torch
-    from integration.autoint import Cuboid, ProdNet, SumNet
+    from integration.autoint import Cuboid, ProdNet, SumNet, CatNet, Prod, MultSequential
     
     cuboids = torch.nn.ModuleList([])
     for _ in range(request.param['n_kernel']):
-        L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True) 
-                        for _ in range(request.param['n_prodnet'])]
-        M_prod_nets = [ProdNet(out_dim=1, bias=True) for _ in range(request.param['n_prodnet'])]
-        cuboids.append(Cuboid(L=SumNet(*L_prod_nets), M=SumNet(*M_prod_nets)).to(device))
+        if request.param['composite']:
+            L_prod_nets = [MultSequential(CatNet(bias=True, neg=True), torch.nn.Linear(3, 3), Prod())
+                            for _ in range(request.param['n_prodnet'])]
+            M_prod_nets = [MultSequential(CatNet(bias=True), torch.nn.Linear(3, 3), Prod())
+                            for _ in range(request.param['n_prodnet'])]
+        else:
+            L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True) 
+                            for _ in range(request.param['n_prodnet'])]
+            M_prod_nets = [ProdNet(out_dim=1, bias=True) for _ in range(request.param['n_prodnet'])]
+        cuboid = Cuboid(L=SumNet(*L_prod_nets), M=SumNet(*M_prod_nets)).to(device)
+        cuboids.append(cuboid)
     return cuboids

@@ -10,27 +10,25 @@
     <img src="https://img.shields.io/badge/Version-1.0.0beta1-green" alt="version">
 </p>
 
-## 丨Introduction
+## 丨 Introduction
 
 **A**utomatic **I**ntegration for Neural **S**patio-**T**emporal **P**oint **P**rocess models (AI-STPP) is a new paradigm for exact, efﬁcient, non-parametric inference of point process. It is capable of learning complicated underlying intensity functions, like a damped sine wave.
 
 AI-STPP is under active development. Try the latest release version in the `main` branch, which include a working 1D case. We are working on the 3D case and trying to do some code refactoring and improvements. 
 
-
-## | Comparison with State-of-the-Art
-<details>
-<summary>Learning Hawkes with AI-TPP or numerical integration</summary>
-<img src="https://fremont.zzhou.info/images/2022/10/06/image-20221006104850204.png" alt="help">
-</details>
-
-<details>
-<summary>Learning damped sine wave with AI-TPP or other baselines</summary>
-<img src="https://fremont.zzhou.info/images/2022/10/06/image-20221006105113074.png" alt="help">
-</details>
-
 ## 丨 Installation
 
-`pip install -r requirements.txt`
+```bash
+conda-lock install --name autoint-stpp
+conda activate autoint-stpp
+poetry install
+```
+
+## | Training and Testing
+
+```bash
+PYTHONPATH=src python src/experiment/main.py -c configs/lightning/autoint_pp.yaml
+```
 
 ## 丨 Project Organization
 

@@ -281,6 +281,8 @@ class DeepSTPP(nn.Module):
             b_i = self.b_dec.decode(z)
                     
         s_i = self.s_dec.decode(z) + self.config.s_min
+        if self.config.s_max is not None:
+            s_i = torch.sigmoid(s_i) * self.config.s_max
         
         s_x, s_y = torch.split(s_i, s_i.size(-1) // 2, dim=-1)
         inv_var = torch.stack((1 / s_x, 1 / s_y), -1)

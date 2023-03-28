@@ -46,7 +46,7 @@ def dataset(device, request):
     dataset_fn = relpath_under('data') + f'/{name}.pkl'
 
     if not request.param['regenerate'] and os.path.exists(dataset_fn):  # Loading
-        dataset = torch.load(dataset_fn)
+        dataset = torch.load(dataset_fn, map_location=device)
     else:
         dataset = Integral3DWrapper([[Xa, Xb], [Ya, Yb], [Za, Zb]], func_to_fit,
                                     request.param['sampling_density'], device)
@@ -138,7 +138,7 @@ def trained_model(sum_prodnet_cuboid, dataloader, device, request):
 
     if not request.param['retrain']:  # try to use the previous trained model
         if os.path.exists(model_fn):
-            model.load_state_dict(torch.load(model_fn)['model_state_dict'])
+            model.load_state_dict(torch.load(model_fn, map_location=device)['model_state_dict'])
             logger.info('Previous model found and loaded.')
             model.eval()
             return model
@@ -276,7 +276,7 @@ class TestClass:
 
         F_gt_fn = relpath_under('data') + f'/{name}_F_gt.pkl'
         if not pytest.config[__file__]['dataloader']['regenerate'] and os.path.exists(F_gt_fn):  # Loading
-            F_gt = torch.load(F_gt_fn)
+            F_gt = torch.load(F_gt_fn, map_location=device)
         else:
             F_gt = torch.tensor([tplquad(func_to_fit, Xa, x[0],
                                                       Ya, x[1],

@@ -134,9 +134,9 @@ def trained_model(dataloader, device, request):
     model_fn = relpath('models') + '.pkl'
     if not request.param['retrain']:  # try to use the previous trained model
         if os.path.exists(model_fn):
-            model.load_state_dict(torch.load(model_fn)['model_state_dict'])
-            train_losses = torch.load(model_fn)['train_losses']
-            val_losses = torch.load(model_fn)['val_losses']
+            model.load_state_dict(torch.load(model_fn, map_location=device)['model_state_dict'])
+            train_losses = torch.load(model_fn, map_location=device)['train_losses']
+            val_losses = torch.load(model_fn, map_location=device)['val_losses']
             logger.info('Previous model found and loaded.')
             model.eval()
             return model, train_losses, val_losses
@@ -237,7 +237,7 @@ def trained_model(dataloader, device, request):
             
             model.train()
     
-    model.load_state_dict(torch.load(model_fn)['model_state_dict'])
+    model.load_state_dict(torch.load(model_fn, map_location=device)['model_state_dict'])
     
     return model, train_losses, val_losses
 

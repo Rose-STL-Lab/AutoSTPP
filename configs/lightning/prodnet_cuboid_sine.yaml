@@ -1,0 +1,38 @@
+seed_everything: 1551
+trainer:
+    precision: 32
+    max_epochs: 500
+    # fast_dev_run: 17
+    accelerator: 'cuda'
+    logger: 
+        class_path: 
+            aim.pytorch_lightning.AimLogger
+        init_args: 
+            experiment: 'cuboid'
+    log_every_n_steps: 1
+    limit_val_batches: 0.25
+    check_val_every_n_epoch: 5
+model:
+    class_path:
+        models.lightning.prodnet_cuboid.ProdnetCuboid
+    init_args:
+        n_prodnet: 2
+        activation: tanh
+        learning_rate: 0.005
+        step_size: 20
+        gamma: 0.5
+        bounds: [[0., 3.], [0., 3.], [0., 3.]]
+        fit_on: f
+        test_on: f
+data:
+    class_path:
+        data.lightning.toy3d.Toy3dDataModule
+    init_args:
+        batch_size: 128
+        test_batch_size: 8192
+        num_workers: 8
+        name: sine
+        option: ready
+        sampling_intensity: 1024
+        grid_size: 50
+        force: false

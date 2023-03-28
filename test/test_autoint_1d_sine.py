@@ -43,7 +43,7 @@ def trained_model(model, dataloader, device, request):
     logger.info(model)
     if not request.param['retrain']:  # try to use the previous trained model
         if os.path.exists(model_fn):
-            model.load_state_dict(torch.load(model_fn)['model_state_dict'])
+            model.load_state_dict(torch.load(model_fn, map_location=device)['model_state_dict'])
             logger.info('Previous model found and loaded.')
             model.eval()
             return model

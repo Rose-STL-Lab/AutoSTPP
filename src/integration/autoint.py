@@ -314,38 +314,24 @@ class ProdNet(nn.Module):
         
         
 class CatNet(nn.Module):
-    def __init__(self, neg=False, bias=True):
-        
+    def __init__(
+        self, 
+        neg=False, 
+        bias=True, 
+        num_layers=2,
+        hidden_size=128,
+        activation=nn.Tanh()
+    ):
         super().__init__()  # init the base class
         # Always 3 -> 3
-        self.x_seq = MultSequential(
-            nn.Linear(1, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 1, bias)
-        )
-        
-        self.y_seq = MultSequential(
-            nn.Linear(1, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 1, bias)
-        )
-
-        self.t_seq = MultSequential(
-            nn.Linear(1, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 1, bias)
-        )
-        
-        if neg:
-            self.x_seq.append(Neg())
-            self.y_seq.append(Neg())
-            self.t_seq.append(Neg())
+        self.x_seq, self.y_seq, self.t_seq = [MultSequential(
+            nn.Linear(1, hidden_size, bias=bias),
+            activation,
+            *itertools.chain(*[[nn.Linear(hidden_size, hidden_size, bias=bias), activation] 
+                               for _ in range(num_layers - 1)]),
+            nn.Linear(hidden_size, 1, bias=bias),
+            *([] if not neg else [Neg()])
+        ) for _ in range(3)]
         
     def dnforward(self, x, dims):
         to_cat = []
@@ -793,7 +779,9 @@ class MultSequential(nn.Sequential):
         """Employ negative / non-negative constraint"""
         with torch.no_grad():
             for layer in self:
-                if isinstance(layer, PadLinear):
+                if hasattr(layer, 'project'):
+                    layer.project()
+                elif isinstance(layer, PadLinear):
                     pass  # No need to clamp because t is "leaked"
                 elif isinstance(layer, CatLinear):
                     for weight in layer.weights:
