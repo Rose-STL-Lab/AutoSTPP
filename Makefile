@@ -1,4 +1,4 @@
-.PHONY: delete_aim_run clean run_cuboid run_stpp wandb data lint requirements sync_data_to_s3 sync_data_from_s3
+.PHONY: delete_aim_run clean run_cuboid run_stpp wandb data lint requirements upload_results download_results clean_results view_local_results
 
 #################################################################################
 # GLOBALS                                                                       #
@@ -9,6 +9,10 @@ BUCKET = [OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')
 PROFILE = default
 PROJECT_NAME = autoint
 PYTHON_INTERPRETER = python3
+RESULT_DIR = results/
+BUCKET_NAME = autoint
+DESTINATION_PATH = "s3://${BUCKET_NAME}/results/"
+
 export PYTHONPATH = src
 
 run_cuboid:
@@ -45,23 +49,44 @@ clean:
 
 ## Lint using flake8
 lint:
-	flake8 src
+	flake8 --max-line-length=120 --ignore=E402,E731,F541,W291,E122,E127,F401,E266,E241,C901,E741,W293,F811,W504 src
 
-## Upload Data to S3
-sync_data_to_s3:
-ifeq (default,$(PROFILE))
-	aws s3 sync data/ s3://$(BUCKET)/data/
-else
-	aws s3 sync data/ s3://$(BUCKET)/data/ --profile $(PROFILE)
-endif
+#################################################################################
+# Aim-stack related                                                             #
+#################################################################################
 
-## Download Data from S3
-sync_data_from_s3:
-ifeq (default,$(PROFILE))
-	aws s3 sync s3://$(BUCKET)/data/ data/
-else
-	aws s3 sync s3://$(BUCKET)/data/ data/ --profile $(PROFILE)
-endif
+## Upload Results to S3
+upload_results:
+	@mkdir -p ${RESULT_DIR}
+	@python src/zip_results.py
+	@rm -rf ${RESULT_DIR}.aim
+	@s3cmd put --skip-existing ${RESULT_DIR}* ${DESTINATION_PATH}
+
+## Download Results from S3
+download_results:
+	@mkdir -p ${RESULT_DIR}
+	@s3cmd sync ${DESTINATION_PATH} ${RESULT_DIR}
+
+## View Latest Downloaded Results
+view_results: download_results
+	@rm -rf ${RESULT_DIR}.aim
+	@unzip `ls -t ${RESULT_DIR}aim* | head -1` -d ${RESULT_DIR}.aim
+	@aim up --port 1551 --host 0.0.0.0 --repo ${RESULT_DIR}.aim/
+
+## View Latest Local Results
+local_results: 
+	@aim up --port 1551 --host 0.0.0.0 --repo .aim/
+
+## Delete all local and remote results; Run with caution
+clean_results:
+	@printf "This target will delete all remote and local archive, please type 'yes' to proceed: "
+		@read ans; \
+		if [ "$$ans" != "yes" ]; then \
+			echo "Not deleted"; \
+			exit 1; \
+	fi
+	@rm -rf ${RESULT_DIR}
+	@s3cmd rm ${DESTINATION_PATH} --recursive
 
 ## Set up python interpreter environment
 create_environment:
@@ -73,19 +98,7 @@ create_environment:
 test_environment:
 	$(PYTHON_INTERPRETER) test_environment.py
 	poetry check
-
-#################################################################################
-# Docker related                                                                #
-#################################################################################
-
-## Install GPU support for docker, use with `docker run -i -t --name autoint --gpus all autoint:latest /bin/bash`
-docker_gpu_support:
-	distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-	curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
-	curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
-	sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-	sudo systemctl restart docker
-
+	
 #################################################################################
 # Autoint Tests                                                                 #
 #################################################################################

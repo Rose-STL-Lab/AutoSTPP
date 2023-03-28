@@ -1,0 +1,63 @@
+stages:
+  - mirror
+  - build-and-push
+
+mirror_to_github:
+  stage: mirror
+  image: 
+    name: alpine/git
+  before_script:
+    - cd
+    - mkdir -p .ssh
+    - chmod 700 .ssh
+    - eval $(ssh-agent -s)
+    - echo "$GIT_DEPLOY_KEY" | base64 -d | tr -d '\r'
+      > .ssh/id_rsa
+    - echo "$SSH_CONFIG" | base64 -d | tr -d '\r'
+      > .ssh/config
+    - echo "$SSH_KNOWN_HOST" | base64 -d | tr -d '\r'
+      > .ssh/known_hosts
+    - chmod 400 .ssh/id_rsa
+    - echo "$GITHUB_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+    - git config --global user.email "ziz244@ucsd.edu"
+    - git config --global user.name "Zihao Zhou"
+    - git clone ssh://git@gitlab-ssh.nrp-nautilus.io:30622/ZihaoZhou/autoint.git
+    - ssh-keyscan github.com >> ~/.ssh/known_hosts
+    - cd autoint
+  script:
+    - git remote add github git@github.com:Rose-STL-Lab/AI-STPP.git
+    - git push --force --set-upstream github main
+    - git push --force github --tags
+  only:
+    - push
+
+build-and-push-job:
+  stage: build-and-push
+  image: 
+    name: gcr.io/kaniko-project/executor:v1.9.0-debug
+    entrypoint: [""]
+  script:
+    - mkdir -p .ssh/
+    - echo "$GIT_DEPLOY_KEY" | base64 -d | tr -d '\r'
+      > .ssh/id_rsa
+    - echo "$SSH_CONFIG" | base64 -d | tr -d '\r'
+      > .ssh/config
+    - echo "$SSH_KNOWN_HOST" | base64 -d | tr -d '\r'
+      > .ssh/known_hosts
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" 
+      > /kaniko/.docker/config.json
+    - /kaniko/executor --cache=true
+      --context $CI_PROJECT_DIR 
+      --dockerfile $CI_PROJECT_DIR/Dockerfile 
+      --destination $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:8} 
+      --destination $CI_REGISTRY_IMAGE:latest
+  timeout: 10h
+  only:
+    refs:
+      - branches
+    changes:
+      - Dockerfile
+      - .gitlab-ci.yml
+      - poetry.lock
+      - pyproject.toml
+      - conda-lock.yml

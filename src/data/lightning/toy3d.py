@@ -75,12 +75,7 @@ class Toy3dDataModule(pl.LightningDataModule):
         super().__init__()
         self.save_hyperparameters()
         if self.hparams.option == 'ready':
-            try:
-                self.validate_data()
-            except AssertionError:
-                logger.error(f"Data not found at {self.hparams.data_dir}. "
-                              "Please run the data module with download or generate option.")
-                raise AssertionError
+            pass
         elif self.hparams.option == 'download':
             self.download_data()
         elif self.hparams.option == 'generate':
@@ -99,14 +94,37 @@ class Toy3dDataModule(pl.LightningDataModule):
             )
         else:
             raise ValueError(f"option {self.hparams.option} not supported")
+        try:
+            self.validate_data()
+        except AssertionError:
+            logger.error(f"Data not found at {self.hparams.data_dir}. "
+                            "Please run the data module with download or generate option.")
+            raise AssertionError
 
     def validate_data(self):
         assert os.path.exists(os.path.join(self.hparams.data_dir, f'{self.hparams.name}_train.pkl'))
+        assert os.path.exists(os.path.join(self.hparams.data_dir, f'{self.hparams.name}_val.pkl'))
         assert os.path.exists(os.path.join(self.hparams.data_dir, f'{self.hparams.name}_test.pkl'))
     
     def download_data(self):
-        """TODO: Download the data"""
-        pass
+        from botocore.client import Config
+        from botocore import UNSIGNED
+        import boto3
+        import os
+
+        s3 = boto3.resource('s3', 
+                            endpoint_url='https://s3-west.nrp-nautilus.io', 
+                            config=Config(signature_version=UNSIGNED))
+        bucket = s3.Bucket('autoint')
+
+        for obj in bucket.objects.all():
+            key = obj.key
+            name = key.split("/")[-1]
+            local_path = os.path.dirname(key)
+            if not os.path.exists(local_path):
+                os.makedirs(local_path)
+            logger.info(f"Downloading {os.path.join(local_path, name)}...")
+            bucket.download_file(key, os.path.join(local_path, name))
         
     def generate_data(
         self,

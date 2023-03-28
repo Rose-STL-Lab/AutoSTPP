@@ -53,7 +53,9 @@ def train_model(config):
 def tune_model():
     # hyperparameters to search
     hparams = {
-        "model.init_args.learning_rate": tune.loguniform(1e-5, 1e-2)
+        "model.init_args.learning_rate": tune.loguniform(0.0001, 0.01),
+        "model.init_args.num_layers": tune.choice([2, 3]),
+        "model.init_args.hidden_size": tune.choice([64, 128, 256])
     }
 
     # metrics to track: keys are displayed names and

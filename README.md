@@ -27,7 +27,7 @@ poetry install
 ## | Training and Testing
 
 ```bash
-PYTHONPATH=src python src/experiment/main.py -c configs/lightning/autoint_pp.yaml
+make run_cuboid
 ```
 
 ## 丨 Project Organization

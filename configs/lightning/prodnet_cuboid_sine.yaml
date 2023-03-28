@@ -2,7 +2,7 @@ seed_everything: 1551
 trainer:
     precision: 32
     max_epochs: 500
-    # fast_dev_run: 17
+    # fast_dev_run: 1
     accelerator: 'cuda'
     logger: 
         class_path: 
@@ -24,6 +24,8 @@ model:
         bounds: [[0., 3.], [0., 3.], [0., 3.]]
         fit_on: f
         test_on: f
+        num_layers: 2
+        hidden_size: 128
 data:
     class_path:
         data.lightning.toy3d.Toy3dDataModule
@@ -32,7 +34,7 @@ data:
         test_batch_size: 8192
         num_workers: 8
         name: sine
-        option: ready
+        option: download
         sampling_intensity: 1024
         grid_size: 50
         force: false

@@ -1,30 +1,26 @@
-FROM continuumio/miniconda3:4.12.0
+FROM gitlab-registry.nrp-nautilus.io/prp/jupyter-stack/base
 
 USER root
 
 # Install dependency
-RUN mkdir -p /root/AI-STPP
-WORKDIR /root/AI-STPP
+RUN apt update && apt install -y make rsync git s3cmd
 
-ADD ./conda-linux-64.lock /root/AI-STPP/conda-linux-64.lock
-ADD ./pyproject.toml /root/AI-STPP/pyproject.toml
-ADD ./poetry.lock /root/AI-STPP/poetry.lock
-RUN conda create --name autoint --file conda-linux-64.lock
+# Add ssh key
+RUN mkdir -p /root/.ssh
+ADD .ssh/id_rsa /root/.ssh/id_rsa
+ADD .ssh/config /root/.ssh/config
+ADD .ssh/known_hosts /root/.ssh/known_hosts
+RUN chmod 400 /root/.ssh/id_rsa
+
+# Pull the latest project
+WORKDIR /root/
+RUN git clone --depth=1 ssh://git@gitlab-ssh.nrp-nautilus.io:30622/ZihaoZhou/autoint.git
+WORKDIR /root/autoint/
+
+RUN conda install -c conda-forge conda-lock
+RUN conda-lock install --name autoint-stpp
 RUN conda clean -afy
 
 # Activate the new conda environment
-SHELL ["conda", "run", "-n", "autoint", "/bin/bash", "-c"]
+SHELL ["/opt/conda/bin/conda", "run", "-n", "autoint-stpp", "/bin/bash", "-c"]
 RUN poetry install
-
-# Install make
-RUN apt update && apt install -y make rsync
-
-# Setup Github SSH private key
-ADD ./id_rsa /root/.ssh/id_rsa
-RUN chmod 600 /root/.ssh/id_rsa
-RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
-
-# Pull the latest project
-RUN git clone git@github.com:Rose-STL-Lab/AI-STPP.git temp --branch 0.1.0
-RUN mv temp/* .
-RUN rm -rf temp/
