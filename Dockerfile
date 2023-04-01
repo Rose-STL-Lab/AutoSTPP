@@ -18,8 +18,10 @@ RUN git clone --depth=1 ssh://git@gitlab-ssh.nrp-nautilus.io:30622/ZihaoZhou/aut
 WORKDIR /root/autoint/
 
 RUN conda install -c conda-forge conda-lock
+RUN conda clean -qafy
+RUN conda install -y conda-build
 RUN conda-lock install --name autoint-stpp
-RUN conda clean -afy
+RUN conda clean -qafy
 
 # Activate the new conda environment
 SHELL ["/opt/conda/bin/conda", "run", "-n", "autoint-stpp", "/bin/bash", "-c"]
