@@ -17,9 +17,8 @@ WORKDIR /root/
 RUN git clone --depth=1 ssh://git@gitlab-ssh.nrp-nautilus.io:30622/ZihaoZhou/autoint.git
 WORKDIR /root/autoint/
 
+RUN conda update --all
 RUN conda install -c conda-forge conda-lock
-RUN conda clean -qafy
-RUN conda install -y conda-build
 RUN conda-lock install --name autoint-stpp
 RUN conda clean -qafy
 
