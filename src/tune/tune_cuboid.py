@@ -38,7 +38,7 @@ def cli_main(args=None):
 
 def train_model(config):
     with mock.patch("sys.argv", [""]):
-        args = ["-c", "configs/lightning/prodnet_cuboid_sine.yaml", 
+        args = ["-c", "../configs/prodnet_cuboid_sine.yaml", 
                 "--trainer.callbacks+=ray.tune.integration.pytorch_lightning.TuneReportCallback",
                 "--trainer.callbacks.metrics={'loss': 'val_mse'}",
                 "--trainer.callbacks.on=validation_end",
@@ -94,7 +94,7 @@ def tune_model():
         progress_reporter=reporter,
         metric="loss",
         mode="min",
-        num_samples=5
+        num_samples=100,
     )
 
     best_trial = result.get_best_trial("loss", "min", "all")

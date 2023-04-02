@@ -1,4 +1,6 @@
-.PHONY: delete_aim_run clean run_cuboid run_stpp wandb data lint requirements upload_results download_results clean_results view_local_results
+.PHONY: delete_aim_run clean wandb data lint requirements 
+.PHONY: run_cuboid run_stpp
+.PHONY: upload_results download_results clean_results view_local_results
 
 #################################################################################
 # GLOBALS                                                                       #
@@ -16,7 +18,7 @@ DESTINATION_PATH = "s3://${BUCKET_NAME}/results/"
 export PYTHONPATH = src
 
 run_cuboid:
-	python src/experiment/run_cuboid.py -c configs/lightning/prodnet_cuboid_sine.yaml
+	python src/experiment/run_cuboid.py -c configs/prodnet_cuboid_sine.yaml
 
 ifeq (,$(shell which conda))
 HAS_CONDA=False
@@ -27,6 +29,13 @@ endif
 #################################################################################
 # COMMANDS                                                                      #
 #################################################################################
+
+## Update kubectl config
+update_kubeconfig:
+	kubectl delete configmap autoint-src-tune --ignore-not-found=true
+	kubectl create configmap autoint-src-tune --from-file=src/tune/
+	kubectl delete configmap autoint-configs --ignore-not-found=true
+	kubectl create configmap autoint-configs --from-file=configs/
 
 ## Toggle wandb
 wandb:
