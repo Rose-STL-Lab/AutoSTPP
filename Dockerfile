@@ -1,4 +1,4 @@
-FROM gitlab-registry.nrp-nautilus.io/prp/jupyter-stack/base
+FROM gitlab-registry.nrp-nautilus.io/prp/jupyter-stack/minimal
 
 USER root
 
