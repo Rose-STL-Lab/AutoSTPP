@@ -7,6 +7,9 @@ import torch
 from utils import arange, tqdm, scale
 from scipy.integrate import quad, dblquad, tplquad
 from loguru import logger
+import multiprocessing
+
+lock = multiprocessing.Lock()
 
 
 class Toy3D(torch.utils.data.Dataset):
@@ -76,24 +79,29 @@ class Toy3dDataModule(pl.LightningDataModule):
         self.save_hyperparameters()
         if self.hparams.option == 'ready':
             pass
-        elif self.hparams.option == 'download':
-            self.download_data()
-        elif self.hparams.option == 'generate':
-            if name == 'sine':
-                func_to_fit = lambda x, y, z: np.sin(x) * np.cos(y) * np.sin(z) + 1
-                bounds = [[0., 3.], [0., 3.], [0., 3.]]
-            elif name == 'normal':
-                func_to_fit = lambda x, y, z: np.exp(-5. * x ** 2 - 5. * y ** 2) * np.exp(-z)
-                bounds = [[-0.5, 0.5], [-0.5, 0.5], [-0.5, 0.5]]
-            self.generate_data(
-                sampling_density=self.hparams.sampling_intensity,
-                func_to_fit=func_to_fit,
-                bounds=bounds,
-                N=self.hparams.grid_size,
-                force=force
-            )
         else:
-            raise ValueError(f"option {self.hparams.option} not supported")
+            lock.acquire()
+            try:
+                if self.hparams.option == 'download':
+                    self.download_data()
+                elif self.hparams.option == 'generate':
+                    if name == 'sine':
+                        func_to_fit = lambda x, y, z: np.sin(x) * np.cos(y) * np.sin(z) + 1
+                        bounds = [[0., 3.], [0., 3.], [0., 3.]]
+                    elif name == 'normal':
+                        func_to_fit = lambda x, y, z: np.exp(-5. * x ** 2 - 5. * y ** 2) * np.exp(-z)
+                        bounds = [[-0.5, 0.5], [-0.5, 0.5], [-0.5, 0.5]]
+                    self.generate_data(
+                        sampling_density=self.hparams.sampling_intensity,
+                        func_to_fit=func_to_fit,
+                        bounds=bounds,
+                        N=self.hparams.grid_size,
+                        force=force
+                    )
+                else:
+                    raise ValueError(f"option {self.hparams.option} not supported")
+            finally:
+                lock.release()
         try:
             self.validate_data()
         except AssertionError:

@@ -36,6 +36,8 @@ update_kubeconfig:
 	kubectl create configmap autoint-src-tune --from-file=src/tune/
 	kubectl delete configmap autoint-configs --ignore-not-found=true
 	kubectl create configmap autoint-configs --from-file=configs/
+	kubectl delete configmap autoint-s3cfg --ignore-not-found=true
+	kubectl create configmap autoint-s3cfg --from-file=/home/ubuntu/.s3cfg
 
 ## Toggle wandb
 wandb:
