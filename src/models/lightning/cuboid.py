@@ -109,7 +109,7 @@ class BaseCuboid(pl.LightningModule):
             try:
                 gt = gt.reshape((N + 1, N + 1, N + 1)).transpose([2, 0, 1])
                 pd = pd.reshape((N + 1, N + 1, N + 1)).transpose([2, 0, 1])
-            except RuntimeError:
+            except ValueError:
                 logger.info("Cannot reshape the predictions to a 3D grid: possibly incomplete test set.")
                 return
                 
