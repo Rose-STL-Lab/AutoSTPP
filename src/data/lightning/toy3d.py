@@ -127,12 +127,13 @@ class Toy3dDataModule(pl.LightningDataModule):
 
         for obj in bucket.objects.all():
             key = obj.key
-            name = key.split("/")[-1]
-            local_path = os.path.dirname(key)
-            if not os.path.exists(local_path):
-                os.makedirs(local_path)
-            logger.info(f"Downloading {os.path.join(local_path, name)}...")
-            bucket.download_file(key, os.path.join(local_path, name))
+            if key.startswith("data/"):
+                name = key.split("/")[-1]
+                local_path = os.path.dirname(key)
+                if not os.path.exists(local_path):
+                    os.makedirs(local_path)
+                logger.info(f"Downloading {os.path.join(local_path, name)}...")
+                bucket.download_file(key, os.path.join(local_path, name))
         
     def generate_data(
         self,

@@ -66,6 +66,18 @@ lint:
 # Aim-stack related                                                             #
 #################################################################################
 
+## Deactivate all aim runs
+toggle_aim:
+	@if [ -d .aim ]; then \
+		echo "Renamed to .aim.old"; \
+		mv .aim .aim.old; \
+	else \
+		if [ -d .aim.old ]; then \
+			echo "Renamed to .aim"; \
+			mv .aim.old .aim; \
+		fi \
+	fi
+
 ## Upload Results to S3
 upload_results:
 	@mkdir -p ${RESULT_DIR}
