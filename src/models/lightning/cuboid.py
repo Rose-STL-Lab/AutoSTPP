@@ -106,8 +106,13 @@ class BaseCuboid(pl.LightningModule):
             gt = torch.cat(gt).detach().cpu().numpy()
             pd = torch.cat(pd).detach().cpu().numpy()
             
-            gt = gt.reshape((N + 1, N + 1, N + 1)).transpose([2, 0, 1])
-            pd = pd.reshape((N + 1, N + 1, N + 1)).transpose([2, 0, 1])
+            try:
+                gt = gt.reshape((N + 1, N + 1, N + 1)).transpose([2, 0, 1])
+                pd = pd.reshape((N + 1, N + 1, N + 1)).transpose([2, 0, 1])
+            except RuntimeError:
+                logger.info("Cannot reshape the predictions to a 3D grid: possibly incomplete test set.")
+                return
+                
             [[Xa, Xb], [Ya, Yb], [Za, Zb]] = self.hparams.bounds
             x_range = np.arange(Xa, Xb + (Xb - Xa) / N, (Xb - Xa) / N)
             y_range = np.arange(Ya, Yb + (Yb - Ya) / N, (Yb - Ya) / N)

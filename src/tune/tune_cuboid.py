@@ -94,7 +94,8 @@ def tune_model():
         progress_reporter=reporter,
         metric="loss",
         mode="min",
-        num_samples=100,
+        num_samples=1000,
+        log_to_file=True
     )
 
     best_trial = result.get_best_trial("loss", "min", "all")
