@@ -1,4 +1,4 @@
-.PHONY: delete_aim_run clean wandb data lint requirements 
+.PHONY: delete_aim_run clean data lint requirements test
 .PHONY: run_cuboid run_stpp
 .PHONY: upload_results download_results clean_results view_local_results
 
@@ -32,22 +32,28 @@ endif
 
 ## Update kubectl config
 update_kubeconfig:
-	kubectl delete configmap autoint-src-tune --ignore-not-found=true
-	kubectl create configmap autoint-src-tune --from-file=src/tune/
-	kubectl delete configmap autoint-configs --ignore-not-found=true
-	kubectl create configmap autoint-configs --from-file=configs/
-	kubectl delete configmap autoint-s3cfg --ignore-not-found=true
-	kubectl create configmap autoint-s3cfg --from-file=/home/ubuntu/.s3cfg
+	@kubectl delete configmap autoint-src-tune --ignore-not-found=true
+	@kubectl create configmap autoint-src-tune --from-file=src/tune/
+	@kubectl delete configmap autoint-configs --ignore-not-found=true
+	@kubectl create configmap autoint-configs --from-file=configs/
+	@kubectl delete configmap autoint-s3cfg --ignore-not-found=true
+	@kubectl create configmap autoint-s3cfg --from-file=/home/ubuntu/.s3cfg
 
-## Toggle wandb
-wandb:
-	if grep -q "wandb.init(mode=\"disabled\")" test/conftest.py; then \
-		sed -i 's/wandb.init(mode="disabled")/wandb.init(project=pytest.fn, entity="point-process", config=wandb_config)/' test/conftest.py; \
-		echo "wandb enabled"; \
-	else \
-		sed -i 's/wandb.init(project=pytest.fn, entity="point-process", config=wandb_config)/wandb.init(mode="disabled")/' test/conftest.py; \
-		echo "wandb disabled"; \
-	fi
+test:
+	@echo "TODO: write some tests"
+
+interactive: update_kubeconfig
+	@kubectl delete -f kube/interactive.yaml --ignore-not-found=true
+	@kubectl create -f kube/interactive.yaml
+	@kubectl wait --for=condition=Ready pod/stpp --timeout=1h
+	@kubectl port-forward pod/stpp 1551:1551 --address 0.0.0.0
+
+tune_cuboid: update_kubeconfig
+	@kubectl delete job cuboid --ignore-not-found=true
+	@kubectl apply -f kube/cuboid.yaml
+	@pod_name=$$(kubectl get pods --selector=job-name=cuboid --output=jsonpath='{.items[0].metadata.name}'); \
+	kubectl wait --for=condition=Ready pod/$$pod_name --timeout=1h; \
+	kubectl port-forward pod/$$pod_name 1552:1551 --address 0.0.0.0
 
 ## Make Dataset
 data: test_environment
@@ -85,10 +91,13 @@ upload_results:
 	@rm -rf ${RESULT_DIR}.aim
 	@s3cmd put --skip-existing ${RESULT_DIR}* ${DESTINATION_PATH}
 
+upload_results_without_zip:
+	@s3cmd put --skip-existing ${RESULT_DIR}* ${DESTINATION_PATH}
+
 ## Download Results from S3
 download_results:
 	@mkdir -p ${RESULT_DIR}
-	@s3cmd sync ${DESTINATION_PATH} ${RESULT_DIR}
+	@s3cmd get --force --recursive ${DESTINATION_PATH} ${RESULT_DIR}
 
 ## View Latest Downloaded Results
 view_results: download_results
@@ -100,15 +109,15 @@ view_results: download_results
 local_results: 
 	@aim up --port 1551 --host 0.0.0.0 --repo .aim/
 
-## Delete all local and remote results; Run with caution
+## Delete all remote results; Run with caution
 clean_results:
-	@printf "This target will delete all remote and local archive, please type 'yes' to proceed: "
+	@printf "This target will delete all remote archive, please type 'yes' to proceed: "
 		@read ans; \
 		if [ "$$ans" != "yes" ]; then \
 			echo "Not deleted"; \
 			exit 1; \
 	fi
-	@rm -rf ${RESULT_DIR}
+	@rm -rf ${RESULT_DIR}/.aim
 	@s3cmd rm ${DESTINATION_PATH} --recursive
 
 ## Set up python interpreter environment
