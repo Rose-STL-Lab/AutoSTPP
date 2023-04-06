@@ -9,26 +9,35 @@ lightning:
   config: configs/prodnet_cuboid_sine.yaml
   extra_args:
     - --data.init_args.num_workers=2
+    - --model.init_args.n_prodnet=10
 hparams:
-  model.init_args.learning_rate:
-    loguniform:
-      lower: 0.0001
-      upper: 0.01
+  # model.init_args.learning_rate:
+  #   loguniform:
+  #     lower: 0.0001
+  #     upper: 0.01
   model.init_args.num_layers:
     choice:
       - 2
       - 3
   model.init_args.hidden_size:
     choice:
+      - 32
       - 64
-      - 128
+  model.init_args.n_prodnet:
+    grid_search:
+      - 2
+      - 4
+      - 6
+      - 8
+      - 10
 scheduler:
-  max_t: 100
-  grace_period: 1
-  reduction_factor: 2
+  max_t: 200
+  grace_period: 100
+  reduction_factor: 3
+  # reduction_factor: 1
 resources:
-  cpu: 2
+  cpu: 3
   gpu: 1
 experiment:
-  name: cuboid_num_layers_hidden_size
-  num_samples: 4
+  name: cuboid
+  num_samples: 200

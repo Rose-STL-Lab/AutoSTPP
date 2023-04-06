@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: stpp
+  labels:
+    user: zihao 
+spec:
+  containers:
+  - name: gpu-container
+    image: gitlab-registry.nrp-nautilus.io/zihaozhou/autoint:latest
+    command: 
+      - /bin/bash
+      - -c
+      - ssh-keyscan -t ecdsa -p 30622 -H gitlab-ssh.nrp-nautilus.io > /root/.ssh/known_hosts;
+        git pull;
+        git reset --hard origin/main;
+        rm -rf ./configs; cp -r --no-preserve=mode,ownership /configs ./configs;
+        echo "conda activate autoint-stpp" >> ~/.bashrc;
+        export PATH="/opt/conda/envs/autoint-stpp/bin/:$PATH";
+        aim init;
+        aim up --port 1551 --host 0.0.0.0 --repo .aim/
+    volumeMounts:
+      - mountPath: /autoint-vol
+        name: autoint-vol
+      - mountPath: /configs
+        name: autoint-configs
+      - mountPath: /home/jovyan/.s3cfg
+        subPath: .s3cfg
+        name: autoint-s3cfg
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+        memory: "12G"
+        cpu: "4"
+    ports:
+      - containerPort: 1551
+  imagePullSecrets:
+  - name: autoint-read-registry
+  restartPolicy: Never
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: nvidia.com/gpu.product
+              operator: In
+              values:
+              - NVIDIA-TITAN-RTX
+              - NVIDIA-RTX-A4000
+              - NVIDIA-RTX-A5000
+              - Quadro-RTX-6000
+              - NVIDIA-A40
+              - NVIDIA-RTX-A6000
+              - Quadro-RTX-8000
+              - NVIDIA-GeForce-RTX-3090
+              - NVIDIA-GeForce-GTX-1080-Ti
+              - NVIDIA-GeForce-GTX-2080-Ti
+              - NVIDIA-A10
+              # - NVIDIA-A100-SXM4-80GB
+              # - Tesla-V100-SXM2-32GB
+              # - NVIDIA-A100-PCIE-40GB
+              # - NVIDIA-A100-SXM4-80GB
+              # - NVIDIA-A100-80GB-PCIe
+  volumes:
+    - name: autoint-vol
+      persistentVolumeClaim:
+        claimName: autoint-vol
+    - name: autoint-configs
+      configMap:
+        name: autoint-configs
+    - name: autoint-s3cfg
+      configMap:
+        name: autoint-s3cfg

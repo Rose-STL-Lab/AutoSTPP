@@ -46,12 +46,12 @@ interactive: update_kubeconfig
 	@kubectl wait --for=condition=Ready pod/stpp --timeout=1h
 	@kubectl port-forward pod/stpp 1552:1551 --address 0.0.0.0
 
+postfix ?=
 tune_cuboid: update_kubeconfig
-	@kubectl delete job cuboid --ignore-not-found=true
+	@sed -i -e '/^metadata:/{n;s/\(^[[:space:]]*name:\).*/\1 cuboid$(postfix)/;}' kube/cuboid.yaml
+	@kubectl delete job cuboid$(postfix) --ignore-not-found=true
 	@kubectl create -f kube/cuboid.yaml
-	@pod_name=$$(kubectl get pods --selector=job-name=cuboid --output=jsonpath='{.items[0].metadata.name}'); \
-	kubectl wait --for=condition=Ready pod/$$pod_name --timeout=1h; \
-	kubectl port-forward pod/$$pod_name 1553:1551 --address 0.0.0.0
+	@pod_name=$$(kubectl get pods --selector=job-name=cuboid$(postfix) --output=jsonpath='{.items[0].metadata.name}')
 
 ## Make Dataset
 data: test_environment
@@ -96,6 +96,7 @@ sync_results:
 			echo "Not deleted"; \
 			exit 1; \
 	fi
+	@rm -rf ${RESULT_DIR}.aim
 	@s3cmd sync --skip-existing --delete-removed ${RESULT_DIR} ${DESTINATION_PATH}
 
 ## Download Results from S3
