@@ -1,0 +1,34 @@
+model:
+  module: models.lightning.cuboid
+  class: BaseCuboid
+data:
+  module: data.lightning.toy3d
+  class: Toy3dDataModule
+lightning:
+  loss: val_mse
+  config: configs/prodnet_cuboid_sine.yaml
+  extra_args:
+    - --data.init_args.num_workers=2
+hparams:
+  model.init_args.learning_rate:
+    loguniform:
+      lower: 0.0001
+      upper: 0.01
+  model.init_args.num_layers:
+    choice:
+      - 2
+      - 3
+  model.init_args.hidden_size:
+    choice:
+      - 64
+      - 128
+scheduler:
+  max_t: 100
+  grace_period: 1
+  reduction_factor: 2
+resources:
+  cpu: 2
+  gpu: 1
+experiment:
+  name: cuboid_num_layers_hidden_size
+  num_samples: 4

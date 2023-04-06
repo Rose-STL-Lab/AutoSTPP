@@ -32,8 +32,6 @@ endif
 
 ## Update kubectl config
 update_kubeconfig:
-	@kubectl delete configmap autoint-src-tune --ignore-not-found=true
-	@kubectl create configmap autoint-src-tune --from-file=src/tune/
 	@kubectl delete configmap autoint-configs --ignore-not-found=true
 	@kubectl create configmap autoint-configs --from-file=configs/
 	@kubectl delete configmap autoint-s3cfg --ignore-not-found=true
@@ -50,7 +48,7 @@ interactive: update_kubeconfig
 
 tune_cuboid: update_kubeconfig
 	@kubectl delete job cuboid --ignore-not-found=true
-	@kubectl apply -f kube/cuboid.yaml
+	@kubectl create -f kube/cuboid.yaml
 	@pod_name=$$(kubectl get pods --selector=job-name=cuboid --output=jsonpath='{.items[0].metadata.name}'); \
 	kubectl wait --for=condition=Ready pod/$$pod_name --timeout=1h; \
 	kubectl port-forward pod/$$pod_name 1553:1551 --address 0.0.0.0

@@ -8,8 +8,17 @@ import os
 from pathlib import Path
 from pytorch_lightning.cli import LightningCLI
 import torch
-from data.lightning.toy3d import Toy3dDataModule
-from models.lightning.cuboid import BaseCuboid
+import importlib
+import yaml
+import argparse
+
+
+def load_class(full_class_string):
+    class_data = full_class_string.split(".")
+    module_path = ".".join(class_data[:-1])
+    class_str = class_data[-1]
+    module = importlib.import_module(module_path)
+    return getattr(module, class_str)
 
 
 class MyLightningCLI(LightningCLI):
@@ -22,11 +31,11 @@ class MyLightningCLI(LightningCLI):
         )
 
 
-def cli_main(args=None):
+def cli_main(args, model_config, data_config):
     torch.set_float32_matmul_precision('medium')
     cli = MyLightningCLI(
-        BaseCuboid, 
-        Toy3dDataModule, 
+        load_class(f"{model_config['module']}.{model_config['class']}"), 
+        load_class(f"{data_config['module']}.{data_config['class']}"),
         subclass_mode_model=True, 
         subclass_mode_data=True,
         save_config_callback=None,
@@ -36,40 +45,40 @@ def cli_main(args=None):
     return cli
 
 
-def train_model(config):
+def train_model(config, tune_config):
     with mock.patch("sys.argv", [""]):
-        args = ["-c", "../configs/prodnet_cuboid_sine.yaml", 
+        args = ["-c", tune_config['lightning']['config'],
                 "--trainer.callbacks+=ray.tune.integration.pytorch_lightning.TuneReportCallback",
-                "--trainer.callbacks.metrics={'loss': 'val_mse'}",
+                f"--trainer.callbacks.metrics={{'loss': '{tune_config['lightning']['loss']}'}}",
                 "--trainer.callbacks.on=validation_end",
-                "--trainer.enable_checkpointing=false"]
+                "--trainer.enable_checkpointing=false",
+                *tune_config['lightnning']['extra_args']]
+        print(args)
         os.chdir(str(Path(__file__).parent.parent))
         for k, v in config.items():
             args += [f"--{k}", str(v)]
-        cli = cli_main(args)
+        cli = cli_main(args, tune_config['model'], tune_config['data'])
         cli.trainer.fit(cli.model, cli.datamodule)
 
 
-def tune_model():
+def tune_model(tune_config):
     # hyperparameters to search
-    hparams = {
-        "model.init_args.learning_rate": tune.loguniform(0.0001, 0.01),
-        "model.init_args.num_layers": tune.choice([2, 3]),
-        "model.init_args.hidden_size": tune.choice([64, 128, 256])
-    }
+    hparams = tune_config['hparams']
+    for k, v in hparams.items():
+        for func, args in v.items():
+            if type(args) == list:
+                hparams.update({k: getattr(tune, func)(args)})
+            elif type(args) == dict:
+                hparams.update({k: getattr(tune, func)(**args)})
 
     # metrics to track: keys are displayed names and
     # values are corresponding labels defined in LightningModule
     metrics = {
-        "loss": "val_mse"
+        "loss": tune_config['lightning']['loss']
     }
 
     # scheduler
-    scheduler = ASHAScheduler(
-        max_t=100,
-        grace_period=1,
-        reduction_factor=2
-    )
+    scheduler = ASHAScheduler(**tune_config['scheduler'])
 
     # progress reporter
     reporter = CLIReporter(
@@ -78,27 +87,29 @@ def tune_model():
     )
     
     # Main analysis
+    train_with_paramters = lambda config: train_model(config, tune_config=tune_config)
+    
     trainable = tune.with_parameters(
-        train_model
+        train_with_paramters
     )
     
     # Assign GPU resources
     trainable = tune.with_resources(
-        train_model,
-        {"cpu": 2, "gpu": 1}
+        trainable,
+        {k: v for k, v in tune_config['resources'].items()}
     )
     
     tuner = tune.Tuner(
         trainable,
         run_config=RunConfig(
-            name="cuboid",
+            name=tune_config['experiment']['name'],
             progress_reporter=reporter,
             log_to_file=True
         ),
         tune_config=TuneConfig(
             mode="min",
             metric="loss",
-            num_samples=1,
+            num_samples=tune_config['experiment']['num_samples'],
             scheduler=scheduler
         ),
         param_space=hparams
@@ -114,4 +125,13 @@ def tune_model():
 
 
 if __name__ == "__main__":
-    tune_model()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config", type=str, required=True,
+                        help="Path to the configuration file")
+    args = parser.parse_args()
+
+    with open(args.config, "r") as f:
+        tune_config = yaml.safe_load(f)
+        logger.info(tune_config)
+
+    tune_model(tune_config)
