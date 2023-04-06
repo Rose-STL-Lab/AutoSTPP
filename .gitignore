@@ -107,4 +107,5 @@ notebooks/deep-stpp
 wandb/
 
 .tmp*
-/.aim/
+/.aim*/
+/temp/

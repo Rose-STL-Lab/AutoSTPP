@@ -46,14 +46,14 @@ interactive: update_kubeconfig
 	@kubectl delete -f kube/interactive.yaml --ignore-not-found=true
 	@kubectl create -f kube/interactive.yaml
 	@kubectl wait --for=condition=Ready pod/stpp --timeout=1h
-	@kubectl port-forward pod/stpp 1551:1551 --address 0.0.0.0
+	@kubectl port-forward pod/stpp 1552:1551 --address 0.0.0.0
 
 tune_cuboid: update_kubeconfig
 	@kubectl delete job cuboid --ignore-not-found=true
 	@kubectl apply -f kube/cuboid.yaml
 	@pod_name=$$(kubectl get pods --selector=job-name=cuboid --output=jsonpath='{.items[0].metadata.name}'); \
 	kubectl wait --for=condition=Ready pod/$$pod_name --timeout=1h; \
-	kubectl port-forward pod/$$pod_name 1552:1551 --address 0.0.0.0
+	kubectl port-forward pod/$$pod_name 1553:1551 --address 0.0.0.0
 
 ## Make Dataset
 data: test_environment
@@ -91,18 +91,28 @@ upload_results:
 	@rm -rf ${RESULT_DIR}.aim
 	@s3cmd put --skip-existing ${RESULT_DIR}* ${DESTINATION_PATH}
 
-upload_results_without_zip:
-	@s3cmd put --skip-existing ${RESULT_DIR}* ${DESTINATION_PATH}
+sync_results:
+	@printf "This target will delete unseen remote archive, please type 'yes' to proceed: "
+		@read ans; \
+		if [ "$$ans" != "yes" ]; then \
+			echo "Not deleted"; \
+			exit 1; \
+	fi
+	@s3cmd sync --skip-existing --delete-removed ${RESULT_DIR} ${DESTINATION_PATH}
 
 ## Download Results from S3
 download_results:
 	@mkdir -p ${RESULT_DIR}
-	@s3cmd get --force --recursive ${DESTINATION_PATH} ${RESULT_DIR}
+	@s3cmd get --skip-existing --recursive ${DESTINATION_PATH} ${RESULT_DIR}
 
 ## View Latest Downloaded Results
 view_results: download_results
 	@rm -rf ${RESULT_DIR}.aim
+ifeq ($(file),)
 	@unzip `ls -t ${RESULT_DIR}aim* | head -1` -d ${RESULT_DIR}.aim
+else
+	@unzip $(file) -d ${RESULT_DIR}.aim
+endif
 	@aim up --port 1551 --host 0.0.0.0 --repo ${RESULT_DIR}.aim/
 
 ## View Latest Local Results
