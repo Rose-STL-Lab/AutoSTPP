@@ -1,7 +1,7 @@
 seed_everything: 1551
 trainer:
     precision: 32
-    max_epochs: 500
+    max_epochs: 300
     # fast_dev_run: 1
     accelerator: 'cuda'
     logger: 
@@ -16,7 +16,7 @@ model:
     class_path:
         models.lightning.prodnet_cuboid.ProdnetCuboid
     init_args:
-        n_prodnet: 2
+        n_prodnet: 5
         activation: tanh
         learning_rate: 0.005
         step_size: 20

@@ -1,12 +1,12 @@
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
-from ray.tune import CLIReporter
+from ray.tune import CLIReporter, TuneConfig
+from ray.air import RunConfig
 from loguru import logger
 import mock
 import os
 from pathlib import Path
 from pytorch_lightning.cli import LightningCLI
-from lightning_fabric.accelerators import find_usable_cuda_devices
 import torch
 from data.lightning.toy3d import Toy3dDataModule
 from models.lightning.cuboid import BaseCuboid
@@ -17,7 +17,7 @@ class MyLightningCLI(LightningCLI):
         parser.set_defaults(
             {
                 "trainer.accelerator": "cuda", 
-                "trainer.devices": find_usable_cuda_devices(1)
+                "trainer.devices": "[0]"
             }
         )
 
@@ -76,33 +76,41 @@ def tune_model():
         parameter_columns={p: p.split('.')[-1] for p in hparams.keys()},
         metric_columns=list(metrics.keys())
     )
-
-    resources_per_trial = {
-        "cpu": 4,
-        "gpu": 1
-    }
-
-    # main analysis
-    trainable_function = tune.with_parameters(
+    
+    # Main analysis
+    trainable = tune.with_parameters(
         train_model
     )
-    result = tune.run(
-        trainable_function,
-        resources_per_trial=resources_per_trial,
-        config=hparams,
-        scheduler=scheduler,
-        progress_reporter=reporter,
-        metric="loss",
-        mode="min",
-        num_samples=1000,
-        log_to_file=True
+    
+    # Assign GPU resources
+    trainable = tune.with_resources(
+        train_model,
+        {"cpu": 2, "gpu": 1}
+    )
+    
+    tuner = tune.Tuner(
+        trainable,
+        run_config=RunConfig(
+            name="cuboid",
+            progress_reporter=reporter,
+            log_to_file=True
+        ),
+        tune_config=TuneConfig(
+            mode="min",
+            metric="loss",
+            num_samples=1,
+            scheduler=scheduler
+        ),
+        param_space=hparams
     )
 
-    best_trial = result.get_best_trial("loss", "min", "all")
+    result = tuner.fit()
+
+    best_result = result.get_best_result("loss", "min", "all")
     logger.info("Best hyperparameters found were:")
-    logger.info(best_trial.config)
+    logger.info(best_result.config)
     logger.info("Corresponding metrics are:")
-    logger.info({metric: best_trial.last_result[metric] for metric in metrics.keys()})
+    logger.info(best_result.metrics)
 
 
 if __name__ == "__main__":
