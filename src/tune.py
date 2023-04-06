@@ -52,7 +52,7 @@ def train_model(config, tune_config):
                 f"--trainer.callbacks.metrics={{'loss': '{tune_config['lightning']['loss']}'}}",
                 "--trainer.callbacks.on=validation_end",
                 "--trainer.enable_checkpointing=false",
-                *tune_config['lightnning']['extra_args']]
+                *tune_config['lightning']['extra_args']]
         print(args)
         os.chdir(str(Path(__file__).parent.parent))
         for k, v in config.items():
