@@ -74,6 +74,11 @@ class Toy3dDataModule(pl.LightningDataModule):
         """        
         super().__init__()
         self.save_hyperparameters()
+        try:
+            self.validate_data()
+            return
+        except AssertionError:
+            pass
         if self.hparams.option == 'ready':
             pass
         elif self.hparams.option == 'download':
