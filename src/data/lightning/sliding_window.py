@@ -3,6 +3,8 @@ import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from data.data import SlidingWindowWrapper
+from download_data import download
+from loguru import logger
 
 
 class SlidingWindowDataModule(pl.LightningDataModule):
@@ -11,6 +13,7 @@ class SlidingWindowDataModule(pl.LightningDataModule):
         self, 
         name: str = 'sthp0', 
         data_dir: str = "./data/spatiotemporal/",
+        option: str = "ready", 
         batch_size: int = 128,
         num_workers: int = 8
     ):
@@ -31,6 +34,8 @@ class SlidingWindowDataModule(pl.LightningDataModule):
             
         data_dir : str, optional
             directory that stores the sequence npz data, by default "./data/spatiotemporal/"
+        option : str, optional
+            whether to download the data or use the ready data, by default 'ready'
         batch_size : int, optional
             batch size
         num_workers : int, optional
@@ -38,11 +43,27 @@ class SlidingWindowDataModule(pl.LightningDataModule):
         """        
         super().__init__()
         self.save_hyperparameters()
-
-    def prepare_data(self):
-        """TODO: Download the data"""
+        
+        if self.hparams.option == 'ready':
+            pass
+        elif self.hparams.option == 'download':
+            self.download_data()
+        else:
+            raise ValueError(f"option {self.hparams.option} not supported")
+        try:
+            self.validate_data()
+        except AssertionError:
+            logger.error(f"Data not found at {self.hparams.data_dir}. "
+                          "Please run the data module with download or generate option, "
+                          "or check if you have specified the correct data directory.")
+            raise AssertionError
+        
+    def validate_data(self):
         assert os.path.exists(os.path.join(self.hparams.data_dir, f'{self.hparams.name}.npz'))
-        assert os.path.exists(os.path.join(self.hparams.data_dir, f'{self.hparams.name}.npz'))
+        
+    def download_data(self):
+        # Hard-coded
+        download('data/spatiotemporal/')
 
     def setup(self, stage: str):
         """Assign train/val datasets for use in dataloaders""" 

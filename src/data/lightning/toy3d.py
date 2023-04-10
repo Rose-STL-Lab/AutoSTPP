@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from typing import Callable, List
 import torch
 from utils import arange, tqdm, scale
+from download_data import download
 from scipy.integrate import quad, dblquad, tplquad
 from loguru import logger
 
@@ -74,11 +75,6 @@ class Toy3dDataModule(pl.LightningDataModule):
         """        
         super().__init__()
         self.save_hyperparameters()
-        try:
-            self.validate_data()
-            return
-        except AssertionError:
-            pass
         if self.hparams.option == 'ready':
             pass
         elif self.hparams.option == 'download':
@@ -103,7 +99,8 @@ class Toy3dDataModule(pl.LightningDataModule):
             self.validate_data()
         except AssertionError:
             logger.error(f"Data not found at {self.hparams.data_dir}. "
-                            "Please run the data module with download or generate option.")
+                          "Please run the data module with download or generate option, "
+                          "or check if you have specified the correct data directory.")
             raise AssertionError
 
     def validate_data(self):
@@ -112,25 +109,8 @@ class Toy3dDataModule(pl.LightningDataModule):
         assert os.path.exists(os.path.join(self.hparams.data_dir, f'{self.hparams.name}_test.pkl'))
     
     def download_data(self):
-        from botocore.client import Config
-        from botocore import UNSIGNED
-        import boto3
-        import os
-
-        s3 = boto3.resource('s3', 
-                            endpoint_url='https://s3-west.nrp-nautilus.io', 
-                            config=Config(signature_version=UNSIGNED))
-        bucket = s3.Bucket('autoint')
-
-        for obj in bucket.objects.all():
-            key = obj.key
-            if key.startswith("data/"):
-                name = key.split("/")[-1]
-                local_path = os.path.dirname(key)
-                if not os.path.exists(local_path):
-                    os.makedirs(local_path)
-                logger.info(f"Downloading {os.path.join(local_path, name)}...")
-                bucket.download_file(key, os.path.join(local_path, name))
+        # Hard-coded
+        download('data/test/test_autoint_3d_positive/')
         
     def generate_data(
         self,

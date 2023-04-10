@@ -1,4 +1,4 @@
-.PHONY: delete_aim_run clean data lint requirements test
+.PHONY: delete_aim_run clean data lint requirements test help
 .PHONY: run_cuboid run_stpp
 .PHONY: upload_results download_results clean_results view_local_results
 
@@ -6,8 +6,8 @@
 # GLOBALS                                                                       #
 #################################################################################
 
+SHELL = /bin/bash
 PROJECT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-BUCKET = [OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')
 PROFILE = default
 PROJECT_NAME = autoint
 PYTHON_INTERPRETER = python3
@@ -19,6 +19,9 @@ export PYTHONPATH = src
 
 run_cuboid:
 	python src/experiment/run_cuboid.py -c configs/prodnet_cuboid_sine.yaml
+
+run_stpp:
+	python src/experiment/run_stpp.py -c configs/autoint_stpp.yaml
 
 ifeq (,$(shell which conda))
 HAS_CONDA=False
@@ -43,8 +46,8 @@ test:
 interactive: update_kubeconfig
 	@kubectl delete -f kube/interactive.yaml --ignore-not-found=true
 	@kubectl create -f kube/interactive.yaml
-	@kubectl wait --for=condition=Ready pod/stpp --timeout=1h
-	@kubectl port-forward pod/stpp 1552:1551 --address 0.0.0.0
+	@kubectl wait --for=condition=Ready pod/autoint-interactive --timeout=1h
+	@kubectl port-forward pod/autoint-interactive 1552:1551 --address 0.0.0.0
 
 postfix ?=
 tune_cuboid: update_kubeconfig
@@ -52,10 +55,6 @@ tune_cuboid: update_kubeconfig
 	@kubectl delete job cuboid$(postfix) --ignore-not-found=true
 	@kubectl create -f kube/cuboid.yaml
 	@pod_name=$$(kubectl get pods --selector=job-name=cuboid$(postfix) --output=jsonpath='{.items[0].metadata.name}')
-
-## Make Dataset
-data: test_environment
-	$(PYTHON_INTERPRETER) src/data/make_dataset.py data/raw data/processed
 
 ## Delete all compiled Python files
 clean:
@@ -70,17 +69,35 @@ lint:
 # Aim-stack related                                                             #
 #################################################################################
 
+## Unlock aim run (for deletion) given prefix
+unlock_aim_run: 
+	$(eval FOLDERS=$(shell find .aim -name '$(prefix)*'))
+	@echo $(FOLDERS)
+	@printf "This target will delete the files above, please type 'yes' to proceed: "
+		@read ans; \
+		if [ "$$ans" != "yes" ]; then \
+			echo "Not deleted"; \
+			exit 1; \
+	fi
+	@$(RM) -rf $(FOLDERS); \
+	echo "Deleted $(FOLDERS)"
+
 ## Deactivate all aim runs
 toggle_aim:
 	@if [ -d .aim ]; then \
 		echo "Renamed to .aim.old"; \
 		mv .aim .aim.old; \
+		aim init; \
 	else \
 		if [ -d .aim.old ]; then \
 			echo "Renamed to .aim"; \
 			mv .aim.old .aim; \
 		fi \
 	fi
+
+#################################################################################
+# S3 related                                                                    #
+#################################################################################
 
 ## Upload Results to S3
 upload_results:
@@ -137,11 +154,12 @@ create_environment:
 
 ## Test python environment is setup correctly
 test_environment:
-	$(PYTHON_INTERPRETER) test_environment.py
-	poetry check
+	@$(PYTHON_INTERPRETER) test_environment.py
+	@poetry check
+	@echo ">>> Poetry is setup correctly!"
 	
 #################################################################################
-# Autoint Tests                                                                 #
+# AutoInt Tests                                                                 #
 #################################################################################
 
 test_1d_sine:
@@ -171,7 +189,6 @@ test_speed_benchmark:
 # 	* print line
 # Separate expressions are necessary because labels cannot be delimited by
 # semicolon; see <http://stackoverflow.com/a/11799865/1968>
-.PHONY: help
 help:
 	@echo "$$(tput bold)Available rules:$$(tput sgr0)"
 	@echo
