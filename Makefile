@@ -1,4 +1,4 @@
-.PHONY: delete_aim_run clean data lint requirements test help
+.PHONY: delete_aim_run clean data lint requirements yaml test help
 .PHONY: run_cuboid run_stpp
 .PHONY: upload_results download_results clean_results view_local_results
 
@@ -41,20 +41,41 @@ update_kubeconfig:
 	@kubectl create configmap autoint-s3cfg --from-file=/home/ubuntu/.s3cfg
 
 test:
-	@echo "TODO: write some tests"
+	@echo $(HAS_CONDA)
 
-interactive: update_kubeconfig
-	@kubectl delete -f kube/interactive.yaml --ignore-not-found=true
-	@kubectl create -f kube/interactive.yaml
-	@kubectl wait --for=condition=Ready pod/autoint-interactive --timeout=1h
-	@kubectl port-forward pod/autoint-interactive 1552:1551 --address 0.0.0.0
+yaml: 
+	@yq '((.. | select(has("command"))).command |= load("kube/startup.yaml") + .)' kube/$(source).yaml > kube/$(dest).yaml
+	@yq -i '(.. | select(has("command"))).command[-2] += " " + (.. | select(has("command"))).command[-1]' kube/$(dest).yaml
+	@yq -i '(.. | select(has("command")).command)[-1] = ""' kube/$(dest).yaml
+	@yq -i 'del(.. | select(length == 0))' kube/$(dest).yaml
+	@yq -i '(.. | select(has("file"))) |= load(.file) *d . | del(.. | select(has("file")).file)' kube/$(dest).yaml
+
+interactive: source = interactive
+interactive: dest = build/run_interactive
+interactive: yaml update_kubeconfig
+	@kubectl delete -f kube/$(dest).yaml --ignore-not-found=true
+	@kubectl create -f kube/$(dest).yaml
+	$(eval POD_NAME=$(shell yq eval '.metadata.name' kube/$(dest).yaml))
+	@echo "Waiting for pod $(POD_NAME) to be ready"
+	@kubectl wait --for=condition=Ready pod/$(POD_NAME) --timeout=1h
+	@kubectl port-forward pod/$(POD_NAME) 1552:1551 --address 0.0.0.0
 
 postfix ?=
-tune_cuboid: update_kubeconfig
-	@sed -i -e '/^metadata:/{n;s/\(^[[:space:]]*name:\).*/\1 cuboid$(postfix)/;}' kube/cuboid.yaml
-	@kubectl delete job cuboid$(postfix) --ignore-not-found=true
-	@kubectl create -f kube/cuboid.yaml
-	@pod_name=$$(kubectl get pods --selector=job-name=cuboid$(postfix) --output=jsonpath='{.items[0].metadata.name}')
+tune_cuboid: source = tune_cuboid
+tune_cuboid: dest = build/run_tune_cuboid
+tune_cuboid: yaml update_kubeconfig
+	@sed -i -e '/^metadata:/{n;s/\(^[[:space:]]*name:\).*/\1 autoint-tune-cuboid$(postfix)/;}' kube/$(dest).yaml
+	@kubectl delete job tune-cuboid$(postfix) --ignore-not-found=true
+	@kubectl create -f kube/$(dest).yaml
+
+job ?= tune_cuboid
+postfix ?=
+source ?= $(job)
+dest ?= build/run_$(job)
+job: yaml update_kubeconfig
+	@yq -i eval '.metadata.name = "autoint-$(job)$(postfix)"' kube/$(dest).yaml
+	@kubectl delete job $(job)$(postfix) --ignore-not-found=true
+	@kubectl create -f kube/$(dest).yaml
 
 ## Delete all compiled Python files
 clean:

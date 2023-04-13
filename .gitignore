@@ -108,3 +108,4 @@ wandb/
 .tmp*
 /.aim*/
 /temp/
+kube/

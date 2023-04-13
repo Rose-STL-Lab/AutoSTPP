@@ -3,6 +3,7 @@ from botocore import UNSIGNED
 import boto3
 import os
 from loguru import logger
+import argparse
 
 
 def download(prefix="data/"):
@@ -23,4 +24,7 @@ def download(prefix="data/"):
 
 
 if __name__ == "__main__":
-    download()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--prefix', help='Prefix for S3 file path', default="data/")
+    args = parser.parse_args()
+    download(args.prefix)
