@@ -15,6 +15,8 @@ RESULT_DIR = results/
 BUCKET_NAME = autoint
 DESTINATION_PATH = "s3://${BUCKET_NAME}/results/"
 MODEL_PATH = "s3://${BUCKET_NAME}/models/"
+AIM_PATH = "s3://${BUCKET_NAME}/aim/"
+CONFIG_PREFIX = autoint-configs
 
 export PYTHONPATH = src
 
@@ -34,12 +36,16 @@ endif
 # COMMANDS                                                                      #
 #################################################################################
 
-## Update kubectl config
+## Update kubectl config, infuse config to template, and delete dangling pods older than 30 minutes
+postfix ?=
 update_kubeconfig:
-	@kubectl delete configmap autoint-configs --ignore-not-found=true
-	@kubectl create configmap autoint-configs --from-file=configs/
-	@kubectl delete configmap autoint-s3cfg --ignore-not-found=true
-	@kubectl create configmap autoint-s3cfg --from-file=/home/ubuntu/.s3cfg
+	@kubectl get configmaps -o json \
+		| jq '.items[] | select((.metadata.creationTimestamp | fromdateiso8601) < (now - 1800) and (.metadata.ownerReferences == null)) | .metadata.name' \
+		| grep $(CONFIG_PREFIX) | xargs -I {} kubectl delete configmap {} --ignore-not-found=true
+	@kubectl delete configmap $(CONFIG_PREFIX)$(postfix) --ignore-not-found=true
+	@kubectl create configmap $(CONFIG_PREFIX)$(postfix) --from-file=configs/
+	@yq -i '(.volumes[] | select(.name == "$(CONFIG_PREFIX)")).configMap.name |= "$(CONFIG_PREFIX)$(postfix)"' kube/template.yaml
+# @kubectl create configmap autoint-s3cfg --from-file=/home/ubuntu/.s3cfg
 
 test:
 	@echo $(HAS_CONDA)
@@ -53,7 +59,7 @@ yaml:
 
 interactive: source = interactive
 interactive: dest = build/run_interactive
-interactive: yaml update_kubeconfig
+interactive: update_kubeconfig yaml
 	@kubectl delete -f kube/$(dest).yaml --ignore-not-found=true
 	@kubectl create -f kube/$(dest).yaml
 	$(eval POD_NAME=$(shell yq eval '.metadata.name' kube/$(dest).yaml))
@@ -62,10 +68,9 @@ interactive: yaml update_kubeconfig
 	@kubectl port-forward pod/$(POD_NAME) 1552:1551 --address 0.0.0.0
 
 job ?= tune_cuboid
-postfix ?=
 source ?= $(job)
 dest ?= build/run_$(job)
-job: yaml update_kubeconfig
+job: update_kubeconfig yaml
 	$(eval JOB_NAME=$(shell echo "autoint-$(job)$(postfix)" | tr '_' '-'))
 	@yq -i eval '.metadata.name = "$(JOB_NAME)"' kube/$(dest).yaml
 	@kubectl delete job $(JOB_NAME) --ignore-not-found=true
@@ -123,12 +128,13 @@ upload_results:
 
 ## Upload all model checkpoints to S3
 upload_models:
-	@find .aim -type f | grep ckpt | cut -d '/' -f 1-2 | xargs -I {} s3cmd sync --recursive {} ${MODEL_PATH}
+	@find . -type f | grep ckpt | rev | cut -d'/' -f4- | rev | xargs -I {} s3cmd sync --recursive {} ${MODEL_PATH}
 
 ## Download all model checkpoints from S3
 download_models:
 	@s3cmd get --skip-existing --recursive ${MODEL_PATH} .aim
 
+## Remove locally deleted results from S3
 sync_results:
 	@printf "This target will delete unseen remote archive, please type 'yes' to proceed: "
 		@read ans; \
