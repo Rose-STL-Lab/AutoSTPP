@@ -8,36 +8,28 @@ lightning:
   loss: val_mse
   config: configs/prodnet_cuboid_sine.yaml
   extra_args:
-    - --data.init_args.num_workers=2
+    - --data.init_args.num_workers=4
     - --model.init_args.n_prodnet=10
+    - --seed_everything=False
 hparams:
   # model.init_args.learning_rate:
   #   loguniform:
   #     lower: 0.0001
   #     upper: 0.01
   model.init_args.num_layers:
-    choice:
-      - 2
-      - 3
+    choice: [2, 3]
   model.init_args.hidden_size:
-    choice:
-      - 32
-      - 64
-  model.init_args.n_prodnet:
-    grid_search:
-      - 2
-      - 4
-      - 6
-      - 8
-      - 10
+    choice: [64, 128]
+  # model.init_args.n_prodnet:
+  #   grid_search: [2, 4, 6, 8, 10]
 scheduler:
   max_t: 200
   grace_period: 100
   reduction_factor: 3
   # reduction_factor: 1
 resources:
-  cpu: 3
-  gpu: 1
+  cpu: 2
+  gpu: 0.25
 experiment:
   name: cuboid
-  num_samples: 200
+  num_samples: 20

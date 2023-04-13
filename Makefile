@@ -14,6 +14,7 @@ PYTHON_INTERPRETER = python3
 RESULT_DIR = results/
 BUCKET_NAME = autoint
 DESTINATION_PATH = "s3://${BUCKET_NAME}/results/"
+MODEL_PATH = "s3://${BUCKET_NAME}/models/"
 
 export PYTHONPATH = src
 
@@ -60,21 +61,14 @@ interactive: yaml update_kubeconfig
 	@kubectl wait --for=condition=Ready pod/$(POD_NAME) --timeout=1h
 	@kubectl port-forward pod/$(POD_NAME) 1552:1551 --address 0.0.0.0
 
-postfix ?=
-tune_cuboid: source = tune_cuboid
-tune_cuboid: dest = build/run_tune_cuboid
-tune_cuboid: yaml update_kubeconfig
-	@sed -i -e '/^metadata:/{n;s/\(^[[:space:]]*name:\).*/\1 autoint-tune-cuboid$(postfix)/;}' kube/$(dest).yaml
-	@kubectl delete job tune-cuboid$(postfix) --ignore-not-found=true
-	@kubectl create -f kube/$(dest).yaml
-
 job ?= tune_cuboid
 postfix ?=
 source ?= $(job)
 dest ?= build/run_$(job)
 job: yaml update_kubeconfig
-	@yq -i eval '.metadata.name = "autoint-$(job)$(postfix)"' kube/$(dest).yaml
-	@kubectl delete job $(job)$(postfix) --ignore-not-found=true
+	$(eval JOB_NAME=$(shell echo "autoint-$(job)$(postfix)" | tr '_' '-'))
+	@yq -i eval '.metadata.name = "$(JOB_NAME)"' kube/$(dest).yaml
+	@kubectl delete job $(JOB_NAME) --ignore-not-found=true
 	@kubectl create -f kube/$(dest).yaml
 
 ## Delete all compiled Python files
@@ -126,6 +120,14 @@ upload_results:
 	@python src/zip_results.py
 	@rm -rf ${RESULT_DIR}.aim
 	@s3cmd put --skip-existing ${RESULT_DIR}* ${DESTINATION_PATH}
+
+## Upload all model checkpoints to S3
+upload_models:
+	@find .aim -type f | grep ckpt | cut -d '/' -f 1-2 | xargs -I {} s3cmd sync --recursive {} ${MODEL_PATH}
+
+## Download all model checkpoints from S3
+download_models:
+	@s3cmd get --skip-existing --recursive ${MODEL_PATH} .aim
 
 sync_results:
 	@printf "This target will delete unseen remote archive, please type 'yes' to proceed: "

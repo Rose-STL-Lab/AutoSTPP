@@ -14,7 +14,7 @@ model:
     class_path:
         models.lightning.autoint_stpp.AutoIntSTPointProcess
     init_args:
-        n_prodnet: 2
+        n_prodnet: 4
         learning_rate: 0.004
 data:
     class_path:
@@ -22,4 +22,5 @@ data:
     init_args:
         batch_size: 128
         num_workers: 8
-        name: sthp0
+        name: earthquakes_jp
+        option: download
