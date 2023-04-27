@@ -41,7 +41,8 @@ def main():
     installed_packages = {}
     for line in lines:
         if line and not line.startswith('#'):
-            name, version, _, _ = line.split()
+            temp = line.split()
+            name, version = temp[0], temp[1]
             installed_packages[name] = version
 
     # Check if the installed package versions match the desired versions

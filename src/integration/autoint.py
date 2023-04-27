@@ -1124,8 +1124,7 @@ class Cuboid(nn.Module):
                yb: TensorType["batch"],
                t:  TensorType["batch"]) -> TensorType["batch", 1]:
         """
-        A closed evaluation of the first derivative (λ_t) over the space [0,1]x[0,1], assuming the intensity
-        is centered at s (origin)
+        A closed evaluation of intensity over the space [xa,xb]x[ya,yb] at time t
 
         :param xa: (batch_size,), lower x bound
         :param xb: (batch_size,), upper x bound
@@ -1134,8 +1133,12 @@ class Cuboid(nn.Module):
         :param t:  (batch_size,), the time
         :return:   (batch_size, 1), the first derivative
         """
-        m = self.M.dnforward(self.rectangle(xa, xb, ya, yb, t).transpose(-1, -2), [2]) * 3
-        l = self.L.dnforward(self.rectangle(xa, xb, ya, yb, t).transpose(-1, -2), [2]) * 3
+        # [4, 3, N] -> [4, N, 3] -> [4*N, 3]
+        inp = self.rectangle(xa, xb, ya, yb, t).permute(0, 2, 1).contiguous().view(-1, 3)
+        m = self.M.dnforward(inp, [2]) * 3
+        m = m.view(4, -1, 1)
+        l = self.L.dnforward(inp, [2]) * 3
+        l = l.view(4, -1, 1)
         return l[2] - l[0] + m[3] - m[2] + l[1] - l[3] + m[0] - m[1]
 
     @typechecked
@@ -1182,6 +1185,7 @@ class Cuboid(nn.Module):
         :param tb: (batch_size,), ending time for integration
         :return:   (batch_size, 1), the first derivative
         """
+        # [24, 3, N] -> [3, 2, 4, 3, N]
         endpoints = self.cuboid(xa, xb, ya, yb, ta, tb).view(3, 2, 4, 3, -1).transpose(-1, -2)
 
         m = self.M(endpoints).sum(0)

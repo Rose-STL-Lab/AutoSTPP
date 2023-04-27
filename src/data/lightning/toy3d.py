@@ -8,6 +8,7 @@ from utils import arange, tqdm, scale
 from download_data import download
 from scipy.integrate import quad, dblquad, tplquad
 from loguru import logger
+from tqdm.contrib.concurrent import thread_map
 
 
 class Toy3D(torch.utils.data.Dataset):
@@ -91,7 +92,7 @@ class Toy3dDataModule(pl.LightningDataModule):
                 func_to_fit=func_to_fit,
                 bounds=bounds,
                 N=self.hparams.grid_size,
-                force=force
+                force=self.hparams.force
             )
         else:
             raise ValueError(f"option {self.hparams.option} not supported")
@@ -142,15 +143,16 @@ class Toy3dDataModule(pl.LightningDataModule):
         Za = bounds[2][0]
         
         def calc_integral(X):
-            X = torch.tensor(X).float()
-            F1 = torch.tensor([quad(lambda x0: func_to_fit(x0, x[1], x[2]), 
-                                    Xa, x[0])[0] for x in tqdm(X)]).float()
-            F2 = torch.tensor([dblquad(lambda x0, x1: func_to_fit(x0, x1, x[2]), 
-                                       Xa, x[0],
-                                       Ya, x[1])[0] for x in tqdm(X)]).float()
-            F3 = torch.tensor([tplquad(func_to_fit, Xa, x[0],
-                                       Ya, x[1],
-                                       Za, x[2])[0] for x in tqdm(X)]).float()
+            if type(X) != torch.Tensor:
+                X = torch.tensor(X).float()
+            F1 = thread_map(lambda x: quad(lambda x0: func_to_fit(x0, x[1], x[2]), Xa, x[0], epsabs=1e-6)[0], X)
+            F2 = thread_map(lambda x: dblquad(lambda x1, x0: func_to_fit(x0, x1, x[2]), 
+                                              Xa, x[0], Ya, x[1], epsabs=1e-6)[0], X)
+            F3 = thread_map(lambda x: tplquad(lambda x2, x1, x0: func_to_fit(x0, x1, x2), 
+                                              Xa, x[0], Ya, x[1], Za, x[2], epsabs=1e-6)[0], X)
+            F1 = torch.tensor(F1).float()
+            F2 = torch.tensor(F2).float()
+            F3 = torch.tensor(F3).float()
             f = func_to_fit(X[:, 0], X[:, 1], X[:, 2]).float()
             return Toy3D(X, f, F1, F2, F3)
         

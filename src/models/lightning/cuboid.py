@@ -154,9 +154,14 @@ class BaseCuboid(pl.LightningModule):
             pd = pd.reshape(-1)
             loss = loss_func(pd, f_gt)
         elif mode == 'F1':
+            # TODO: implement F1
             pass
         elif mode == 'F2':
-            pass
+            pd = self.cuboid.lamb_t(torch.ones_like(x[:, 0]) * torch.tensor(self.Xa), x[:, 0],
+                                    torch.ones_like(x[:, 1]) * torch.tensor(self.Ya), x[:, 1],
+                                    x[:, 2])
+            pd = pd.reshape(-1)
+            loss = loss_func(pd, F2_gt)
         elif mode == 'F3':
             pd = self.cuboid.int_lamb(torch.ones_like(x[:, 0]) * torch.tensor(self.Xa), x[:, 0],
                                       torch.ones_like(x[:, 1]) * torch.tensor(self.Ya), x[:, 1],

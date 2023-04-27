@@ -15,7 +15,6 @@ RESULT_DIR = results/
 BUCKET_NAME = autoint
 DESTINATION_PATH = "s3://${BUCKET_NAME}/results/"
 MODEL_PATH = "s3://${BUCKET_NAME}/models/"
-AIM_PATH = "s3://${BUCKET_NAME}/aim/"
 CONFIG_PREFIX = autoint-configs
 
 export PYTHONPATH = src
@@ -177,7 +176,7 @@ clean_results:
 
 ## Set up python interpreter environment
 create_environment:
-	conda create --name autoint --file conda-linux-64.lock
+	conda create --name autoint --file conda-lock.yml
 	conda activate autoint
 	poetry install
 
