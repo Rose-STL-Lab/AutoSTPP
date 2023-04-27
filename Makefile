@@ -22,6 +22,9 @@ export PYTHONPATH = src
 run_cuboid:
 	python src/experiment/run_cuboid.py -c configs/prodnet_cuboid_sine.yaml
 
+run_cuboid_normal:
+	python src/experiment/run_cuboid.py -c configs/prodnet_cuboid_normal.yaml
+
 run_stpp:
 	python src/experiment/run_stpp.py -c configs/autoint_stpp.yaml
 

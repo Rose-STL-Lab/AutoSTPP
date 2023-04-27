@@ -17,16 +17,24 @@ model:
         models.lightning.prodnet_cuboid.ProdnetCuboid
     init_args:
         n_prodnet: 2
+        activation: tanh
         learning_rate: 0.005
+        step_size: 20
+        gamma: 0.5
         bounds: [[-0.5, 0.5], [-0.5, 0.5], [-0.5, 0.5]]
+        fit_on: f
+        test_on: F2
+        num_layers: 2
+        hidden_size: 128
 data:
     class_path:
         data.lightning.toy3d.Toy3dDataModule
     init_args:
         batch_size: 128
+        test_batch_size: 8192
         num_workers: 8
         name: normal
-        option: generate
+        option: ready
         sampling_intensity: 1024
         grid_size: 50
         force: true

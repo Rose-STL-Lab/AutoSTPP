@@ -23,7 +23,7 @@ model:
         gamma: 0.5
         bounds: [[0., 3.], [0., 3.], [0., 3.]]
         fit_on: f
-        test_on: f
+        test_on: F2
         num_layers: 2
         hidden_size: 128
 data:
@@ -34,7 +34,7 @@ data:
         test_batch_size: 8192
         num_workers: 8
         name: sine
-        option: download
+        option: ready
         sampling_intensity: 1024
         grid_size: 50
         force: false
