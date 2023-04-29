@@ -93,16 +93,16 @@ lint:
 
 ## Unlock aim run (for deletion) given prefix
 unlock_aim_run: 
-	$(eval FOLDERS=$(shell find .aim -name '$(prefix)*'))
-	@echo $(FOLDERS)
+	$(eval LOCKS=$(shell find .aim -name '*.softlock'))
+	@echo $(LOCKS)
 	@printf "This target will delete the files above, please type 'yes' to proceed: "
 		@read ans; \
 		if [ "$$ans" != "yes" ]; then \
 			echo "Not deleted"; \
 			exit 1; \
 	fi
-	@$(RM) -rf $(FOLDERS); \
-	echo "Deleted $(FOLDERS)"
+	@$(RM) -rf $(LOCKS); \
+	echo "Deleted $(LOCKS)"
 
 ## Deactivate all aim runs
 toggle_aim:
