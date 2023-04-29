@@ -1,7 +1,6 @@
 import torch
 from models.lightning.cuboid import BaseCuboid
 from integration.autoint import Cuboid, SumNet, Prod, MultSequential, CatNet, act_dict
-from loguru import logger
 
 
 class ProdnetCuboid(BaseCuboid):
@@ -21,6 +20,12 @@ class ProdnetCuboid(BaseCuboid):
         n_prodnet : int
             Number of ProdNet layers in the Cuboid
             Increasing number of ProdNet improves model expressiveness at the cost of training time
+        num_layers : int
+            Number of layers in each ProdNet component
+        hidden_size : int
+            Hidden size of each ProdNet component
+        activation : str
+            Activation function of each ProdNet component
         """ 
         super().__init__(**kwargs)
         self.save_hyperparameters()

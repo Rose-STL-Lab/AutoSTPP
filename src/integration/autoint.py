@@ -250,33 +250,21 @@ class SumNet(nn.Module):
 
 
 class ProdNet(nn.Module):
-    def __init__(self, neg=False, bias=True, out_dim=1):
+    def __init__(self, neg=False, bias=True, out_dim=1, hidden_size=128, num_layers=2, activation=nn.Tanh()):
         
         super().__init__()  # init the base class
         self.out_dim = out_dim
-        self.x_seq = MultSequential(
-            nn.Linear(1, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, out_dim, bias)
-        )
         
-        self.y_seq = MultSequential(
-            nn.Linear(1, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, out_dim, bias)
-        )
-
-        self.t_seq = MultSequential(
-            nn.Linear(1, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, 128, bias),
-            nn.Tanh(),
-            nn.Linear(128, out_dim, bias)
-        )
+        def create_layers(num_layers):
+            layers = [nn.Linear(1, hidden_size, bias), activation]
+            for _ in range(num_layers - 1):
+                layers += [nn.Linear(hidden_size, hidden_size, bias), activation]
+            layers += [nn.Linear(hidden_size, out_dim, bias)]
+            return layers
+        
+        self.x_seq = MultSequential(*create_layers(num_layers))
+        self.y_seq = MultSequential(*create_layers(num_layers))
+        self.t_seq = MultSequential(*create_layers(num_layers))
         
         if neg:
             self.x_seq.append(Neg())

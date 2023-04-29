@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from models.lightning.stpp import BaseSTPointProcess
-from integration.autoint import Cuboid, SumNet, ProdNet
+from integration.autoint import Cuboid, SumNet, ProdNet, act_dict
 from loguru import logger
 from tqdm import tqdm
 
@@ -11,6 +11,9 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
     def __init__(
         self, 
         n_prodnet: int = 2,
+        hidden_size: int = 128,
+        num_layers: int = 2,
+        activation: str = 'tanh',
         **kwargs  # for BaseSTPointProcess
     ) -> None:
         """AutoInt Point Process
@@ -20,13 +23,21 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         n_prodnet : int
             Number of ProdNet layers in the Cuboid L and M
             Increasing number of ProdNet improves model expressiveness at the cost of training time
+        num_layers : int
+            Number of layers in each ProdNet component
+        hidden_size : int
+            Hidden size of each ProdNet component
+        activation : str
+            Activation function of each ProdNet component
         """ 
         super().__init__(**kwargs)
         self.save_hyperparameters()
         
-        L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True) 
-                        for _ in range(self.hparams.n_prodnet)]
-        M_prod_nets = [ProdNet(out_dim=1, bias=True) for _ in range(self.hparams.n_prodnet)]
+        act = act_dict[self.hparams.activation]
+        L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True, activation=act, num_layers=self.hparams.num_layers, 
+                               hidden_size=self.hparams.hidden_size) for _ in range(self.hparams.n_prodnet)]
+        M_prod_nets = [ProdNet(out_dim=1, bias=True, activation=act, num_layers=self.hparams.num_layers,
+                               hidden_size=self.hparams.hidden_size) for _ in range(self.hparams.n_prodnet)]
         cuboid = Cuboid(L=SumNet(*L_prod_nets), M=SumNet(*M_prod_nets))
         
         # log background intensity

@@ -4,6 +4,7 @@ trainer:
     max_epochs: 50
     # fast_dev_run: True
     accelerator: 'cuda'
+    devices: [0]
     logger: 
         class_path: 
             aim.pytorch_lightning.AimLogger
@@ -14,13 +15,22 @@ model:
     class_path:
         models.lightning.autoint_stpp.AutoIntSTPointProcess
     init_args:
-        n_prodnet: 4
+        n_prodnet: 10
+        hidden_size: 128
+        num_layers: 2
+        activation: tanh
         learning_rate: 0.004
+        step_size: 20
+        gamma: 0.5
+        nsteps: [51, 51, 201]
+        round_time: true
+        trunc: true
+        name: sthp0
 data:
     class_path:
         data.lightning.sliding_window.SlidingWindowDataModule
     init_args:
         batch_size: 128
         num_workers: 8
-        name: earthquakes_jp
-        option: download
+        name: sthp0
+        option: ready
