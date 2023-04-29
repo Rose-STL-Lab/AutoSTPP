@@ -22,8 +22,9 @@ def cli_main(args: ArgsType = None):
 
 if __name__ == '__main__':
     cli = cli_main()
-    # cli.model = cli.model.load_from_checkpoint(
-    #     '/home/ubuntu/Github/AutoInt-STPP/.aim/autoint_pp/64fe2b7408064aa6a52bd15f/checkpoints/epoch=49-step=950.ckpt'
-    # )
-    cli.trainer.fit(cli.model, cli.datamodule)
+    cli.model = cli.model.load_from_checkpoint(
+        '.aim/autoint_stpp/4ba0f852cb74459fa3dbb0ab/checkpoints/epoch=49-step=950.ckpt',
+        **cli.model.hparams
+    )
+    # cli.trainer.fit(cli.model, cli.datamodule)
     cli.trainer.test(cli.model, cli.datamodule)

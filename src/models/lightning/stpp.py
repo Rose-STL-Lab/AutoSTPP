@@ -7,9 +7,9 @@ from typing import Union, Optional, Callable, Any
 from torch.optim.optimizer import Optimizer
 from pytorch_lightning.core.optimizer import LightningOptimizer
 from typing import List
-from tqdm import tqdm
 from visualization.plotter import plot_lambst_interactive
 from data.synthetic import STHPDataset, STSCPDataset
+from abc import abstractmethod
 
 
 def load_synt(name: str, x_num: int, y_num: int):
@@ -32,7 +32,7 @@ def load_synt(name: str, x_num: int, y_num: int):
                                              [0, .5]]),
                             alpha=.5, beta=1, mu=.2,
                             dist_only=False)
-        t_range = 200
+        T = 200
     elif name == 'sthp1':
         synt = STHPDataset(s_mu=np.array([0, 0]), 
                             g0_cov=np.array([[5, 0],
@@ -41,7 +41,7 @@ def load_synt(name: str, x_num: int, y_num: int):
                                             [0, .1]]),
                             alpha=.5, beta=.6, mu=.15,
                             dist_only=False)
-        t_range = 200
+        T = 200
     elif name == 'sthp2':
         synt = STHPDataset(s_mu=np.array([0, 0]), 
                             g0_cov=np.array([[1, 0],
@@ -50,7 +50,7 @@ def load_synt(name: str, x_num: int, y_num: int):
                                             [0, .1]]),
                             alpha=.3, beta=2, mu=1,
                             dist_only=False)
-        t_range = 200
+        T = 200
     elif name == 'stscp0':
         synt = STSCPDataset(g0_cov=np.array([[1, 0],
                                              [0, 1]]),
@@ -59,7 +59,7 @@ def load_synt(name: str, x_num: int, y_num: int):
                             alpha=.2, beta=.2, mu=1, gamma=0,
                             x_num=x_num, y_num=y_num,
                             max_history=100, dist_only=False)
-        t_range = 100
+        T = 100
     elif name == 'stscp1':
         synt = STSCPDataset(g0_cov=np.array([[.4, 0],
                                              [0, .4]]),
@@ -68,7 +68,7 @@ def load_synt(name: str, x_num: int, y_num: int):
                             alpha=.3, beta=.2, mu=1, gamma=0,
                             x_num=x_num, y_num=y_num, lamb_max=4, 
                             max_history=100, dist_only=False)
-        t_range = 100
+        T = 100
     elif name == 'stscp2':
         synt = STSCPDataset(g0_cov=np.array([[.25, 0],
                                              [0, .25]]),
@@ -77,12 +77,12 @@ def load_synt(name: str, x_num: int, y_num: int):
                             alpha=.4, beta=.2, mu=1, gamma=0,
                             x_num=x_num, y_num=y_num, lamb_max=4, 
                             max_history=100, dist_only=False)
-        t_range = 100
+        T = 100
     else:
-        return None, None
+        return None, 0.
         
     synt.load(f'data/raw/spatiotemporal/{name}.data', t_start=0, t_end=10000)
-    return synt, t_range
+    return synt, T
 
 
 class BaseSTPointProcess(pl.LightningModule):
@@ -122,7 +122,7 @@ class BaseSTPointProcess(pl.LightningModule):
         nsteps: List[int], optional
             The number of steps to visualize for each dimension (x, y, t)
         round_time: bool, optional
-            Whether to round time range to nearest integer
+            Whether to round time range to integers between, then t_nstep will be ignored
         trune: bool, optional
             Whether to truncate the history for intensity computation
         max_history: int, optional
@@ -206,7 +206,7 @@ class BaseSTPointProcess(pl.LightningModule):
         device = self.st_x[0].device
         ## Stack ST outputs
         st_x = torch.cat(self.st_x, 0).cpu()
-        # st_y = torch.cat(self.st_y, 0).cpu()
+        st_y = torch.cat(self.st_y, 0).cpu()
         st_x_cum = torch.cat(self.st_x_cum, 0).cpu()
         st_y_cum = torch.cat(self.st_y_cum, 0).cpu()
         lambs = []
@@ -218,109 +218,52 @@ class BaseSTPointProcess(pl.LightningModule):
         biases = st_x_cum_[0, 2, :] - st_x[0, 2, :] * scales
         biases = biases.numpy()
         
-        ## Discretize space
         if self.hparams.vis_bounds is None:
-            xmax = 1.0
-            xmin = 0.0
-            ymax = 1.0
-            ymin = 0.0
-        ## Normalize space
+            ## Discretize space
+            xmin, xmax, ymin, ymax = 0.0, 1.0, 0.0, 1.0
         else:
-            xmin = (self.hparams.vis_bounds[0][0] - biases[0]) / scales[0]
-            xmax = (self.hparams.vis_bounds[0][1] - biases[0]) / scales[0]
-            ymin = (self.hparams.vis_bounds[1][0] - biases[1]) / scales[1]
-            ymax = (self.hparams.vis_bounds[1][1] - biases[1]) / scales[1]
+            ## Normalize space
+            bounds = np.array(self.hparams.vis_bounds)
+            bounds = ((bounds.T - biases) / scales).T
+            [xmin, xmax], [ymin, ymax] = bounds
         
         x_nstep, y_nstep, t_nstep = self.hparams.nsteps
         
         ############## Calculate synthetic intensity ##############
-        synt, t_range = load_synt(self.hparams.name, x_nstep, y_nstep)
+        synt, T = load_synt(self.hparams.name, x_nstep, y_nstep)
+        his_st = st_y_cum.squeeze(1).detach().cpu().numpy()
+        his_st[:, -1] += self.hparams.start_idx * T
+        # Calculate the ground truth intensity
+        t_start = his_st[0, -1]
+        t_end = his_st[-1, -1]
+        logger.info(f'Intensity time range : {t_start} ~ {t_end}')
+        
+        if self.hparams.round_time:
+            t_num = int(t_end - t_start) + 1
+        else:
+            t_num = t_nstep
+        t_range = torch.linspace(t_start, t_end, t_num)
+        
         if synt is not None:
-            his_st = st_y_cum.squeeze(1).detach().cpu().numpy()
-            his_st[:, -1] += self.hparams.start_idx * t_range
-            
-            # Calculate the ground truth intensity
-            t_start = his_st[0, -1]
-            t_end = his_st[-1, -1]
-            if self.hparams.round_time:
-                t_num = int(t_end - t_start) + 1
-            else:
-                t_step = (t_end - t_start) / (t_nstep - 1)
-                t_num = np.arange(t_start, t_end + 1e-5, t_step)
-            
             lambs_gt, x_range, y_range, t_range = synt.get_lamb_st(x_num=x_nstep, y_num=y_nstep, 
                                                                    t_num=t_num, t_start=t_start, t_end=t_end)
-            
-            ## Normalize range
-            x_range = (torch.Tensor(x_range) - biases[0]) / scales[0]
-            y_range = (torch.Tensor(y_range) - biases[1]) / scales[1]
         else:
-            x_step = (xmax - xmin) / (x_nstep - 1)
-            y_step = (ymax - ymin) / (y_nstep - 1)
-            x_range = torch.arange(xmin, xmax + 1e-5, x_step)
-            y_range = torch.arange(ymin, ymax + 1e-5, y_step)
-            
-            ## Discretize time
-            t_start = st_y_cum[0, -1, -1].item()
-            t_end = st_y_cum[-1, -1, -1].item()
-            print(f'Intensity time range : {t_start} ~ {t_end}')
-            if self.hparams.round_time:
-                t_range = torch.arange(round(t_start), round(t_end) + 1e-5, 1.)
-            else:
-                t_step = (t_end - t_start) / (t_nstep - 1)
-                t_range = torch.arange(t_start, t_end + 1e-5, t_step)
+            x_range = torch.linspace(xmin, xmax, x_nstep)
+            y_range = torch.linspace(ymin, ymax, y_nstep)
         
-        s_grids = torch.stack(torch.meshgrid(x_range, y_range, indexing='ij'), dim=-1).view(-1, 2).to(device)
+        ## Normalize range
+        x_range = (torch.Tensor(x_range) - biases[0]) / scales[0]
+        y_range = (torch.Tensor(y_range) - biases[1]) / scales[1]
+    
+        ############## Calculate model intensity ##############
+        lambs = self.calc_lamb(st_x, st_x_cum, st_y, st_y_cum, scales, biases,
+                               x_range, y_range, t_range, device)
         
-        ## Convert to history
-        his_st_cum = torch.vstack((st_x_cum[0], st_y_cum.squeeze())).numpy()
-
-        for t in tqdm(t_range):
-            i = sum(his_st_cum[:-1, -1] <= t.item()) - 1  # Index of corresponding history events
-            
-            his_st_cum_ = his_st_cum[:i + 1]   # History events (unscaled)
-            his_st_cum_ = torch.tensor(his_st_cum_).float().to(device)
-            
-            # st_x__ = st_x[:i + 1, 0].to(device)   # History events (scaled)
-            st_x_ = his_st_cum_.clone()
-            st_x_[1:, -1] = torch.diff(st_x_[:, -1])
-            ## History events (scaled)
-            st_x_ = (st_x_ - torch.tensor(biases).to(device)) / torch.tensor(scales).to(device) 
-            
-            # Truncate the history events
-            if self.hparams.trunc:
-                his_st_cum_ = his_st_cum_[-self.hparams.max_history:]
-                st_x_ = st_x_[-self.hparams.max_history:]
-            
-            s_diff = s_grids.T.unsqueeze(-1) - st_x_[:, :-1].T.unsqueeze(-2)  # Spatial difference
-            s_diff = s_diff.permute([1, 2, 0])  # [len(s_grids), len(his_st_cum_), 2]
-            
-            # assert torch.allclose(s_diff[0], s_grids[0] - st_x_[:, :-1])
-            # assert torch.allclose(s_diff[1], s_grids[1] - st_x_[:, :-1])
-            
-            t_diff = t - his_st_cum_[:, -1]  # [len(his_st_cum_)]
-            t_diff = torch.stack([t_diff] * len(s_grids), 0).unsqueeze(-1)  # [len(s_grids), len(his_st_cum_), 1]
-            t_diff = t_diff / scales[-1]
-            
-            st_diff = torch.cat((s_diff, t_diff), -1)  # Spatiotemporal difference
-            
-            temp = st_diff.view(-1, 3)
-            
-            # Load in batches
-            lamb = []
-            for i in range(0, len(temp), self.hparams.vis_batch_size):
-                lamb.append(self.calc_lamb(temp[i:i + self.hparams.vis_batch_size]).cpu().detach().numpy() +
-                            self.calc_background(temp[i:i + self.hparams.vis_batch_size]).cpu().detach().numpy())
-            lamb = np.concatenate(lamb, 0)
-            lamb = lamb.reshape(len(s_grids), -1)
-            lamb = lamb.sum(-1).reshape(x_nstep, y_nstep)
-            lambs.append(lamb / np.prod(scales))
-
         ## Denormalize space
         x_range = x_range.numpy() * scales[0] + biases[0]
         y_range = y_range.numpy() * scales[1] + biases[1]
         
-        cmin = min(np.array(lambs_gt).min(), np.array(lambs).min())
+        cmin = 0.0
         cmax = max(np.array(lambs_gt).max(), np.array(lambs).max())
         
         ## For AutoInt: lambs, x_range, y_range, t_range, his_st_cum[:, :2], his_st_cum[:, 2]
@@ -330,6 +273,35 @@ class BaseSTPointProcess(pl.LightningModule):
                                       subplot_titles=['Ground Truth', type(self).__name__])
         
         self.logger.experiment.track(Figure(fig), name='intensity', step=0, context={'subset': 'test'},)
+        
+    @abstractmethod
+    def calc_lamb(self, st_x, st_x_cum, st_y, st_y_cum, scales, biases,
+                  x_range, y_range, t_range, device):
+        """Computing the intensity function over 3D [x, y, t] samples
+
+        Parameters
+        ----------
+        st_x : torch.Tensor
+            Normalized spatiotemporal sliding windows, N events, delta-time
+        st_x_cum : torch.Tensor
+            Normalized spatiotemporal sliding window, 1 event, delta-time
+        st_y : torch.Tensor
+            Spatiotemporal sliding window, N events, cumulative-time
+        st_y_cum : torch.Tensor
+            Spatiotemporal sliding window, 1 event, cumulative-time
+        scales : np.ndarray
+            Normalization scales
+        biases : np.ndarray
+            Normalization biases
+        x_range : torch.Tensor
+            Normalized x range for intensity calculation
+        y_range : torch.Tensor
+            Normalized y range for intensity calculation
+        t_range : torch.Tensor
+            t range for intensity calculation
+        device : torch.device
+        """
+        pass
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)

@@ -1,7 +1,9 @@
 import torch
+import numpy as np
 from models.lightning.stpp import BaseSTPointProcess
 from integration.autoint import Cuboid, SumNet, ProdNet
 from loguru import logger
+from tqdm import tqdm
 
 
 class AutoIntSTPointProcess(BaseSTPointProcess):
@@ -104,8 +106,59 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
 
         sll = ll - tll
         return -ll, sll, tll
+    
+    def calc_lamb(self, st_x, st_x_cum, st_y, st_y_cum, scales, biases,
+                       x_range, y_range, t_range, device):
+        s_grids = torch.stack(torch.meshgrid(x_range, y_range, indexing='ij'), dim=-1).view(-1, 2).to(device)
+        
+        ## Convert to history
+        his_st_cum = torch.vstack((st_x_cum[0], st_y_cum.squeeze())).numpy()
 
-    def calc_lamb(self, st_diff):
+        lambs = []
+        for t in tqdm(t_range):
+            i = sum(his_st_cum[:-1, -1] <= t.item()) - 1  # Index of corresponding history events
+            
+            his_st_cum_ = his_st_cum[:i + 1]   # History events (unscaled)
+            his_st_cum_ = torch.tensor(his_st_cum_).float().to(device)
+            
+            # st_x__ = st_x[:i + 1, 0].to(device)   # History events (scaled)
+            st_x_ = his_st_cum_.clone()
+            st_x_[1:, -1] = torch.diff(st_x_[:, -1])
+            
+            ## History events (scaled)
+            st_x_ = (st_x_ - torch.tensor(biases).to(device)) / torch.tensor(scales).to(device) 
+            
+            # Truncate the history events
+            if self.hparams.trunc:
+                his_st_cum_ = his_st_cum_[-self.hparams.max_history:]
+                st_x_ = st_x_[-self.hparams.max_history:]
+            
+            s_diff = s_grids.T.unsqueeze(-1) - st_x_[:, :-1].T.unsqueeze(-2)  # Spatial difference
+            s_diff = s_diff.permute([1, 2, 0])  # [len(s_grids), len(his_st_cum_), 2]
+            
+            # assert torch.allclose(s_diff[0], s_grids[0] - st_x_[:, :-1])
+            # assert torch.allclose(s_diff[1], s_grids[1] - st_x_[:, :-1])
+            
+            t_diff = t - his_st_cum_[:, -1]  # [len(his_st_cum_)]
+            t_diff = torch.stack([t_diff] * len(s_grids), 0).unsqueeze(-1)  # [len(s_grids), len(his_st_cum_), 1]
+            t_diff = t_diff / scales[-1]
+            
+            st_diff = torch.cat((s_diff, t_diff), -1)  # Spatiotemporal difference
+            temp = st_diff.view(-1, 3)
+            
+            # Load in batches
+            lamb = []
+            for i in range(0, len(temp), self.hparams.vis_batch_size):
+                lamb.append(self.calc_f(temp[i:i + self.hparams.vis_batch_size]).cpu().detach().numpy() +
+                            self.calc_background(temp[i:i + self.hparams.vis_batch_size]).cpu().detach().numpy())
+            lamb = np.concatenate(lamb, 0)
+            lamb = lamb.reshape(len(s_grids), -1)
+            lamb = lamb.sum(-1).reshape(len(x_range), len(y_range))
+            lambs.append(lamb / np.prod(scales))
+            
+        return np.array(lambs)
+
+    def calc_f(self, st_diff):
         return self.F.forward(st_diff)
 
     def calc_background(self, st_diff):
