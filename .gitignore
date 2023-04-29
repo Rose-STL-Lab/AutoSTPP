@@ -109,3 +109,4 @@ wandb/
 /.aim*/
 /temp/
 kube/
+/test.py

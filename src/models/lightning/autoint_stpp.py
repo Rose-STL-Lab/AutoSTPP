@@ -9,7 +9,7 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
     def __init__(
         self, 
         n_prodnet: int = 2,
-        learning_rate: float = 0.004,
+        **kwargs  # for BaseSTPointProcess
     ) -> None:
         """AutoInt Point Process
 
@@ -18,10 +18,8 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         n_prodnet : int
             Number of ProdNet layers in the Cuboid L and M
             Increasing number of ProdNet improves model expressiveness at the cost of training time
-        learning_rate : float, optional
-            Learning rate of Cuboid
         """ 
-        super().__init__()
+        super().__init__(**kwargs)
         self.save_hyperparameters()
         
         L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True) 
@@ -71,18 +69,10 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         lambs_sum = torch.sum(lambs, -1) + torch.exp(self.background)
         
         ########## Calculate temporal intensity ############
-        # lamb_t = self.F.lamb_t_stpp(s_x.view(-1, 2), 
-        #                             t_diff.view(-1, 1)).view([batch, seq_len])
-        # lamb_t = torch.sum(lamb_t, -1) + torch.exp(self.background)  # sum up all events' influence
-        
-        N = 10
-        rand_locs = torch.rand([N, *s_x.shape]).to(self.device) - s_x  # Random locations centered at s_x
-        inp = torch.cat((rand_locs, t_diff.unsqueeze(0).unsqueeze(-1).repeat(N, 1, 1, 1)), -1)
-        shape_ = inp.shape
-        lamb_t = self.F.forward(inp.view(-1, 3)).view(shape_[:-1]).mean(0).squeeze(-1)
+        # [batch, seq_len]
+        lamb_t = self.F.lamb_t_stpp(s_x.view(-1, 2), 
+                                    t_diff.view(-1, 1)).view([batch, seq_len])
         lamb_t = torch.sum(lamb_t, -1) + torch.exp(self.background)  # sum up all events' influence
-        
-        # logger.debug(lamb_t)
 
         ######### Calculate integral intensity ##########
         # [batch, seq_len]
@@ -99,6 +89,7 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         tll = torch.log(lamb_t).mean() - lamb_ints.mean()
         ll = torch.log(lambs_sum).mean() - lamb_ints.mean()
 
+        ######### Debugging numerical error ########
         if not torch.all(lambs_sum > 0):
             idx = torch.argmax(torch.isnan(torch.log(lambs_sum)).float())
             logger.debug(idx)
@@ -114,35 +105,8 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         sll = ll - tll
         return -ll, sll, tll
 
-    def training_step(self, batch, batch_idx):
-        st_x, st_y, _, _, _ = batch
-        nll, sll, tll = self(st_x, st_y)
-        
-        if torch.isnan(nll):
-            logger.error("Numerical error, quiting...")
-            
-        self.log('train_nll', nll.item())
-        self.log('train_sll', sll.item())
-        self.log('train_tll', tll.item())
-        return nll
+    def calc_lamb(self, st_diff):
+        return self.F.forward(st_diff)
 
-    def validation_step(self, batch, batch_idx):
-        st_x, st_y, _, _, _ = batch
-        nll, sll, tll = self(st_x, st_y)
-
-        self.log('val_nll', nll.item())
-        self.log('val_sll', sll.item())
-        self.log('val_tll', tll.item())
-        return nll
-
-    def test_step(self, batch, batch_idx):
-        st_x, st_y, _, _, _ = batch
-        nll, sll, tll = self(st_x, st_y)
-
-        self.log('test_nll', nll.item())
-        self.log('test_sll', sll.item())
-        self.log('test_tll', tll.item())
-        return nll
-
-    def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+    def calc_background(self, st_diff):
+        return torch.exp(self.background)
