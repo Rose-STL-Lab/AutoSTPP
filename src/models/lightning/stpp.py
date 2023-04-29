@@ -123,7 +123,7 @@ class BaseSTPointProcess(pl.LightningModule):
             The number of steps to visualize for each dimension (x, y, t)
         round_time: bool, optional
             Whether to round time range to integers between, then t_nstep will be ignored
-        trune: bool, optional
+        trunc: bool, optional
             Whether to truncate the history for intensity computation
         max_history: int, optional
             The maximum history length to truncate, ignored if trunc is False
@@ -247,13 +247,12 @@ class BaseSTPointProcess(pl.LightningModule):
         if synt is not None:
             lambs_gt, x_range, y_range, t_range = synt.get_lamb_st(x_num=x_nstep, y_num=y_nstep, 
                                                                    t_num=t_num, t_start=t_start, t_end=t_end)
+            ## Normalize range
+            x_range = (torch.Tensor(x_range) - biases[0]) / scales[0]
+            y_range = (torch.Tensor(y_range) - biases[1]) / scales[1]
         else:
             x_range = torch.linspace(xmin, xmax, x_nstep)
             y_range = torch.linspace(ymin, ymax, y_nstep)
-        
-        ## Normalize range
-        x_range = (torch.Tensor(x_range) - biases[0]) / scales[0]
-        y_range = (torch.Tensor(y_range) - biases[1]) / scales[1]
     
         ############## Calculate model intensity ##############
         lambs = self.calc_lamb(st_x, st_x_cum, st_y, st_y_cum, scales, biases,
@@ -264,13 +263,20 @@ class BaseSTPointProcess(pl.LightningModule):
         y_range = y_range.numpy() * scales[1] + biases[1]
         
         cmin = 0.0
-        cmax = max(np.array(lambs_gt).max(), np.array(lambs).max())
+        if synt is not None:
+            cmax = max(np.array(lambs_gt).max(), np.array(lambs).max())
+            lambs_list = [lambs_gt, lambs]
+            subplot_titles = ['Ground Truth', type(self).__name__]
+        else:
+            cmax = np.array(lambs).max()
+            lambs_list = lambs
+            subplot_titles = [type(self).__name__]
         
         ## For AutoInt: lambs, x_range, y_range, t_range, his_st_cum[:, :2], his_st_cum[:, 2]
-        fig = plot_lambst_interactive([lambs_gt, lambs], x_range, y_range, t_range, show=False,
+        fig = plot_lambst_interactive(lambs_list, x_range, y_range, t_range, show=False,
                                       cmin=cmin, cmax=cmax,
-                                      master_title=f'{self.hparams.name} Comparison',
-                                      subplot_titles=['Ground Truth', type(self).__name__])
+                                      master_title=self.hparams.name,
+                                      subplot_titles=subplot_titles)
         
         self.logger.experiment.track(Figure(fig), name='intensity', step=0, context={'subset': 'test'},)
         
