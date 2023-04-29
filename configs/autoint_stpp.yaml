@@ -25,6 +25,7 @@ model:
         nsteps: [51, 51, 201]
         round_time: true
         trunc: true
+        vis_type: ['interactive', 'static']
         name: sthp0
 data:
     class_path:

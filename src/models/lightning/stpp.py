@@ -1,13 +1,13 @@
 import numpy as np
 import torch
 import pytorch_lightning as pl
-from aim import Figure
+from aim import Figure, Image
 from loguru import logger
 from typing import Union, Optional, Callable, Any
 from torch.optim.optimizer import Optimizer
 from pytorch_lightning.core.optimizer import LightningOptimizer
 from typing import List
-from visualization.plotter import plot_lambst_interactive
+from visualization.plotter import plot_lambst_interactive, plot_lambst_static
 from data.synthetic import STHPDataset, STSCPDataset
 from abc import abstractmethod
 
@@ -20,7 +20,7 @@ def load_synt(name: str, x_num: int, y_num: int):
     :param name: name of the synthetic dataset
     :param x_num: number of x grid points
     :param y_num: number of y grid points
-    
+
     :return synt: the synthetic dataset
     :return t_range: the time range of the dataset
     """
@@ -101,7 +101,8 @@ class BaseSTPointProcess(pl.LightningModule):
         round_time: bool = True,
         trunc: bool = False,
         max_history: int = 20,
-        vis_batch_size: int = 8192
+        vis_batch_size: int = 8192,
+        vis_type: List[str] = ['interactive']
     ):
         """Spatiotemporal Point Process Model
         
@@ -129,6 +130,8 @@ class BaseSTPointProcess(pl.LightningModule):
             The maximum history length to truncate, ignored if trunc is False
         vis_batch_size: int, optional
             The batch size for intensity computation
+        vis_type: List[str], optional
+            The type of visualization, 'interactive' or 'static', can be neither or both
         """
         super().__init__()
         self.save_hyperparameters()
@@ -203,6 +206,9 @@ class BaseSTPointProcess(pl.LightningModule):
         self.st_y_cum.append(outputs['st_y_cum'])
         
     def on_test_epoch_end(self):
+        if len(self.hparams.vis_type) == 0:
+            return  # Skip visualization
+        
         device = self.st_x[0].device
         ## Stack ST outputs
         st_x = torch.cat(self.st_x, 0).cpu()
@@ -269,16 +275,24 @@ class BaseSTPointProcess(pl.LightningModule):
             subplot_titles = ['Ground Truth', type(self).__name__]
         else:
             cmax = np.array(lambs).max()
-            lambs_list = lambs
+            lambs_list = [lambs]
             subplot_titles = [type(self).__name__]
         
-        ## For AutoInt: lambs, x_range, y_range, t_range, his_st_cum[:, :2], his_st_cum[:, 2]
-        fig = plot_lambst_interactive(lambs_list, x_range, y_range, t_range, show=False,
-                                      cmin=cmin, cmax=cmax,
-                                      master_title=self.hparams.name,
-                                      subplot_titles=subplot_titles)
+        if 'interactive' in self.hparams.vis_type:
+            if len(lambs_list) == 1:
+                lambs_list = lambs_list[0]
+            fig = plot_lambst_interactive(lambs_list, x_range, y_range, t_range, show=False,
+                                          cmin=cmin, cmax=cmax,
+                                          master_title=self.hparams.name,
+                                          subplot_titles=subplot_titles)
+            self.logger.experiment.track(Figure(fig), name='intensity', step=0, context={'subset': 'test'},)
         
-        self.logger.experiment.track(Figure(fig), name='intensity', step=0, context={'subset': 'test'},)
+        if 'static' in self.hparams.vis_type:
+            for lambs, title in zip(lambs_list, subplot_titles):
+                fig = plot_lambst_static(lambs, x_range, y_range, t_range, 
+                                         cmax=cmax, fps=12, fn=f'{title}.gif',)
+                self.logger.experiment.track(Image(f'{title}.gif'), name='static-' + title, 
+                                             context={'subset': 'test'})    
         
     @abstractmethod
     def calc_lamb(self, st_x, st_x_cum, st_y, st_y_cum, scales, biases,
