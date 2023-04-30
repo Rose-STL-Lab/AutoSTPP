@@ -3,7 +3,7 @@ FROM gitlab-registry.nrp-nautilus.io/prp/jupyter-stack/minimal
 USER root
 
 # Install dependency
-RUN apt update && apt install -y make rsync git s3cmd vim
+RUN apt update && apt install -y make rsync git s3cmd vim ffmpeg
 
 # Add ssh key
 RUN mkdir -p /root/.ssh

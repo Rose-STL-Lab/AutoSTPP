@@ -78,6 +78,16 @@ job: update_kubeconfig yaml
 	@kubectl delete job $(JOB_NAME) --ignore-not-found=true
 	@kubectl create -f kube/$(dest).yaml
 
+## Launch jobs for all datasets 
+BATCH_NAMES = sthp0 sthp1 sthp2 stscp0 stscp1 stscp2 earthquakes_jp covid_nj_cases
+batch_stpp: 
+	$(foreach name, $(BATCH_NAMES), \
+        yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/autoint_stpp.yaml && \
+        $(eval job_name := $(subst _,-,$(name))) \
+        $(MAKE) job job=stpp postfix=-$(job_name)-0; \
+		$(MAKE) job job=stpp postfix=-$(job_name)-1; \
+    )
+
 ## Delete all compiled Python files
 clean:
 	find . -type f -name "*.py[co]" -delete

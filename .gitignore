@@ -99,6 +99,7 @@ logs/
 
 id_rsa*
 *.bck
+*.gif
 
 notebooks/covid
 notebooks/deep-stpp

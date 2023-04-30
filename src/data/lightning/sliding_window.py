@@ -64,6 +64,7 @@ class SlidingWindowDataModule(pl.LightningDataModule):
     def download_data(self):
         # Hard-coded
         download('data/spatiotemporal/')
+        download('data/raw/')
 
     def setup(self, stage: str):
         """Assign train/val datasets for use in dataloaders""" 
