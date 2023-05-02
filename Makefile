@@ -19,15 +19,6 @@ CONFIG_PREFIX = autoint-configs
 
 export PYTHONPATH = src
 
-run_cuboid:
-	python src/experiment/run_cuboid.py -c configs/prodnet_cuboid_sine.yaml
-
-run_cuboid_normal:
-	python src/experiment/run_cuboid.py -c configs/prodnet_cuboid_normal.yaml
-
-run_stpp:
-	python src/experiment/run_stpp.py -c configs/autoint_stpp.yaml
-
 ifeq (,$(shell which conda))
 HAS_CONDA=False
 else
@@ -38,8 +29,33 @@ endif
 # COMMANDS                                                                      #
 #################################################################################
 
-## Update kubectl config, infuse config to template, and delete dangling pods older than 30 minutes
+#################################################################################
+# Cuboid related                                                                #
+#################################################################################
+
+run_cuboid:
+	python src/experiment/run_cuboid.py -c configs/prodnet_cuboid_sine.yaml
+
+run_cuboid_normal:
+	python src/experiment/run_cuboid.py -c configs/prodnet_cuboid_normal.yaml
+
+#################################################################################
+# STPP related                                                                  #
+#################################################################################
+
+# List all the config files that end with 'stpp.yaml'
+CONFIG_FILES := $(wildcard configs/*stpp.yaml)
+
+config ?= autoint_stpp
+run_stpp:
+	python src/experiment/run_stpp.py -c configs/$(config).yaml
+
+#################################################################################
+# Kubernetes related                                                            #
+#################################################################################
+
 postfix ?=
+## Update kubectl config, infuse config to template, and delete dangling pods older than 30 minutes
 update_kubeconfig:
 	@kubectl get configmaps -o json \
 		| jq '.items[] | select((.metadata.creationTimestamp | fromdateiso8601) < (now - 1800) and (.metadata.ownerReferences == null)) | .metadata.name' \
@@ -73,19 +89,26 @@ job ?= tune_cuboid
 source ?= $(job)
 dest ?= build/run_$(job)
 job: update_kubeconfig yaml
-	$(eval JOB_NAME=$(shell echo "autoint-$(job)$(postfix)" | tr '_' '-'))
+	$(eval JOB_NAME=$(shell echo "$(PROJECT_NAME)-$(job)$(postfix)" | tr '_' '-'))
 	@yq -i eval '.metadata.name = "$(JOB_NAME)"' kube/$(dest).yaml
 	@kubectl delete job $(JOB_NAME) --ignore-not-found=true
 	@kubectl create -f kube/$(dest).yaml
 
-## Launch jobs for all datasets 
+
 BATCH_NAMES = sthp0 sthp1 sthp2 stscp0 stscp1 stscp2 earthquakes_jp covid_nj_cases
-batch_stpp: 
+# Kube config filename
+job_name ?= stpp
+# Lightning config filename
+config_fn ?= autoint_copula_stpp
+## Launch jobs for all datasets 
+batch_job: 
+	@sed -i 's,configs/[^[:space:]]*.yaml,configs/$(config_fn).yaml,g' kube/$(job_name).yaml	
 	$(foreach name, $(BATCH_NAMES), \
-        yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/autoint_stpp.yaml && \
-        $(eval job_name := $(subst _,-,$(name))) \
-        $(MAKE) job job=stpp postfix=-$(job_name)-0; \
-		$(MAKE) job job=stpp postfix=-$(job_name)-1; \
+        yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/$(config_fn).yaml && \
+        $(eval postf := $(subst _,-,$(name))) \
+		$(eval pref := $(subst _,-,$(config_fn))) \
+        $(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-0; \
+		$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-1; \
     )
 
 ## Delete all compiled Python files

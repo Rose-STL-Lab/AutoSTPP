@@ -107,6 +107,7 @@ notebooks/deep-stpp
 wandb/
 
 .tmp*
+.blackhole
 /.aim*/
 /temp/
 kube/
