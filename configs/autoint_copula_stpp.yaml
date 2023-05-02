@@ -8,13 +8,12 @@ trainer:
     logger:
         class_path: aim.pytorch_lightning.AimLogger
         init_args:
-            experiment: 'autoint_stpp'
-            # repo: .blackhole
+            experiment: 'autoint_copula_stpp'
     log_every_n_steps: 1
 model:
-    class_path: models.lightning.autoint_stpp.AutoIntSTPointProcess
+    class_path: models.lightning.autoint_copula_stpp.AutoIntCopulaSTPointProcess
     init_args:
-        n_prodnet: 10
+        n_prodnet: 1
         hidden_size: 128
         num_layers: 2
         activation: tanh
@@ -25,13 +24,12 @@ model:
         round_time: true
         trunc: true
         vis_type: ['interactive', 'static']
-        max_history: 10
         start_idx: 2
-        name: stscp0
+        name: covid_nj_cases
 data:
     class_path: data.lightning.sliding_window.SlidingWindowDataModule
     init_args:
         batch_size: 128
         num_workers: 8
-        name: stscp0
+        name: covid_nj_cases
         option: ready

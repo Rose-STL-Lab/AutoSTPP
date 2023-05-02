@@ -113,7 +113,7 @@ def plot_lambst_static(lambs, x_range, y_range, t_range, fps, scaler=None, cmin=
         cmax = np.max([np.max(lamb_st) for lamb_st in lambs])
     if cmax is None:
         cmax = np.max(lambs)
-    print(f'Inferred cmax: {cmax}')
+    logger.debug(f'Inferred cmax: {cmax}')
     cmid = cmin + (cmax - cmin) * 0.9
 
     grid_x, grid_y = np.meshgrid(x_range, y_range)

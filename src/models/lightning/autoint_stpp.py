@@ -14,6 +14,7 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         hidden_size: int = 128,
         num_layers: int = 2,
         activation: str = 'tanh',
+        bias: bool = True,
         **kwargs  # for BaseSTPointProcess
     ) -> None:
         """AutoInt Point Process
@@ -29,14 +30,23 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
             Hidden size of each ProdNet component
         activation : str
             Activation function of each ProdNet component
+        bias : bool
+            Whether to use bias in each ProdNet component
         """ 
         super().__init__(**kwargs)
         self.save_hyperparameters()
+        self.create()
         
+    def create(self):
+        """
+        Create the model
+        """
         act = act_dict[self.hparams.activation]
-        L_prod_nets = [ProdNet(out_dim=1, bias=True, neg=True, activation=act, num_layers=self.hparams.num_layers, 
+        L_prod_nets = [ProdNet(out_dim=1, bias=self.hparams.bias, neg=True, activation=act, 
+                               num_layers=self.hparams.num_layers, 
                                hidden_size=self.hparams.hidden_size) for _ in range(self.hparams.n_prodnet)]
-        M_prod_nets = [ProdNet(out_dim=1, bias=True, activation=act, num_layers=self.hparams.num_layers,
+        M_prod_nets = [ProdNet(out_dim=1, bias=self.hparams.bias, activation=act, 
+                               num_layers=self.hparams.num_layers,
                                hidden_size=self.hparams.hidden_size) for _ in range(self.hparams.n_prodnet)]
         cuboid = Cuboid(L=SumNet(*L_prod_nets), M=SumNet(*M_prod_nets))
         
@@ -119,7 +129,7 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         return -ll, sll, tll
     
     def calc_lamb(self, st_x, st_x_cum, st_y, st_y_cum, scales, biases,
-                       x_range, y_range, t_range, device):
+                  x_range, y_range, t_range, device):
         s_grids = torch.stack(torch.meshgrid(x_range, y_range, indexing='ij'), dim=-1).view(-1, 2).to(device)
         
         ## Convert to history
@@ -155,16 +165,18 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
             t_diff = t_diff / scales[-1]
             
             st_diff = torch.cat((s_diff, t_diff), -1)  # Spatiotemporal difference
-            temp = st_diff.view(-1, 3)
+            st_diff = st_diff.view(-1, 3)
             
             # Load in batches
             lamb = []
-            for i in range(0, len(temp), self.hparams.vis_batch_size):
-                lamb.append(self.calc_f(temp[i:i + self.hparams.vis_batch_size]).cpu().detach().numpy() +
-                            self.calc_background(temp[i:i + self.hparams.vis_batch_size]).cpu().detach().numpy())
+            batch_size = self.hparams.vis_batch_size
+            for i in range(0, len(st_diff), batch_size):
+                lamb.append(self.calc_f(st_diff[i:i + batch_size]).cpu().detach().numpy())
             lamb = np.concatenate(lamb, 0)
             lamb = lamb.reshape(len(s_grids), -1)
             lamb = lamb.sum(-1).reshape(len(x_range), len(y_range))
+            lamb += self.calc_background(st_diff[i:i + batch_size]).item()
+            
             lambs.append(lamb / np.prod(scales))
             
         return np.array(lambs)
