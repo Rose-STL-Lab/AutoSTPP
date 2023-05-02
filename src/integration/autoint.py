@@ -46,6 +46,15 @@ class AddMixSequential(nn.Module):
             seq.project()
             
             
+class Exp(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    @staticmethod
+    def forward(x):
+        return torch.exp(x)
+            
+            
 class Neg(nn.Module):
     def __init__(self):
         super().__init__()  # init the base class

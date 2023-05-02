@@ -1,0 +1,36 @@
+seed_everything: 1551
+trainer:
+    precision: 32
+    max_epochs: 50
+    # fast_dev_run: True
+    accelerator: 'cuda'
+    devices: [2]
+    logger:
+        class_path: aim.pytorch_lightning.AimLogger
+        init_args:
+            experiment: 'montecarlo_stpp'
+    log_every_n_steps: 1
+model:
+    class_path: models.lightning.montecarlo_stpp.MonteCarloSTPointProcess
+    init_args:
+        N: 100
+        n_prodnet: null
+        hidden_size: 128
+        num_layers: 2
+        activation: tanh
+        learning_rate: 0.004
+        step_size: 20
+        gamma: 0.5
+        nsteps: [101, 101, 101]
+        round_time: false
+        trunc: true
+        vis_type: ['interactive', 'static']
+        start_idx: 5
+        name: stscp0
+data:
+    class_path: data.lightning.sliding_window.SlidingWindowDataModule
+    init_args:
+        batch_size: 128
+        num_workers: 8
+        name: stscp0
+        option: ready
