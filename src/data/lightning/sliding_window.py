@@ -70,16 +70,12 @@ class SlidingWindowDataModule(pl.LightningDataModule):
         """Assign train/val datasets for use in dataloaders""" 
         npz = np.load(os.path.join(self.hparams.data_dir, f'{self.hparams.name}.npz'), allow_pickle=True)
     
-        if stage == "fit":
-            self.sliding_train = SlidingWindowWrapper(npz['train'], normalized=True, device="cpu")
-            self.sliding_val = SlidingWindowWrapper(npz['val'], normalized=True, device="cpu")
-
-        # Assign test dataset for use in dataloader(s)
-        if stage == "test":
-            self.sliding_test = SlidingWindowWrapper(npz['test'], normalized=True, device="cpu")
-
-        if stage == "predict":
-            self.sliding_predict = SlidingWindowWrapper(npz['test'], normalized=True, device="cpu")
+        # Load all dataset in any stage (for using the same normalization)
+        self.sliding_train = SlidingWindowWrapper(npz['train'], normalized=True, device="cpu")
+        self.sliding_val = SlidingWindowWrapper(npz['val'], normalized=True, min=self.sliding_train.min, 
+                                                max=self.sliding_train.max, device="cpu")
+        self.sliding_test = SlidingWindowWrapper(npz['test'], normalized=True, min=self.sliding_train.min, 
+                                                 max=self.sliding_train.max, device="cpu")
 
     def train_dataloader(self):
         return DataLoader(
