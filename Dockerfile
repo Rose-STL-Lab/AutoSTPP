@@ -21,6 +21,7 @@ RUN conda update --all
 RUN conda install -c conda-forge conda-lock
 RUN conda-lock install --name autoint-stpp
 RUN conda clean -qafy
+RUN mamba update -y -c conda-forge ffmpeg
 
 # Activate the new conda environment
 SHELL ["/opt/conda/bin/conda", "run", "-n", "autoint-stpp", "/bin/bash", "-c"]
