@@ -22,8 +22,6 @@ def cli_main(args: ArgsType = None):
 
 if __name__ == '__main__':
     cli = cli_main()
-    # cli.model = cli.model.load_from_checkpoint(
-    #     '.aim/cuboid/a51568a160c946c99c8bea74/checkpoints/epoch=499-step=4000.ckpt',
-    # )
+    torch.multiprocessing.set_sharing_strategy('file_system')
     cli.trainer.fit(cli.model, cli.datamodule)
     cli.trainer.test(cli.model, cli.datamodule)
