@@ -500,6 +500,30 @@ def get_update_time(model_fn: str):
     return datetime.fromtimestamp(os.path.getmtime(model_fn))
 
 
+def find_ckpt_path(hash_str):
+    aim_path = os.path.abspath('.aim')
+    largest_N = -1
+    largest_N_path = None
+    
+    # Walk through all subdirectories of `.aim` recursively, skipping certain directories
+    skip_dirs = ['.aim/check_ins', '.aim/locks', '.aim/meta', '.aim/progress', '.aim/seqs']
+    for dirpath, _, filenames in os.walk(aim_path):
+        if any(skip_dir in dirpath for skip_dir in skip_dirs):
+            # Skip directories in `skip_dirs`
+            continue
+        if hash_str in dirpath:
+            for f in filenames:
+                if f.endswith('.ckpt'):
+                    checkpoint_path = os.path.join(dirpath, f)
+                    checkpoint_info = f[:-5].split('-')
+                    N = int(checkpoint_info[1].split('=')[1])
+                    if N > largest_N:
+                        largest_N = N
+                        largest_N_path = checkpoint_path
+
+    return largest_N_path
+
+
 if __name__ == '__main__':
     # logger.info(get_device(min_ram=0))
     X_flat = arange(100, [[0., 1.], [0., 2.], [0., 3.]], lib=np)
