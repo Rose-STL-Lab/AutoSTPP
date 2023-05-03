@@ -500,8 +500,8 @@ def get_update_time(model_fn: str):
     return datetime.fromtimestamp(os.path.getmtime(model_fn))
 
 
-def find_ckpt_path(hash_str):
-    aim_path = os.path.abspath('.aim')
+def find_ckpt_path(hash_str, aim_path='.aim'):
+    aim_path = os.path.abspath(aim_path)
     largest_N = -1
     largest_N_path = None
     
@@ -526,6 +526,7 @@ def find_ckpt_path(hash_str):
 
 if __name__ == '__main__':
     # logger.info(get_device(min_ram=0))
-    X_flat = arange(100, [[0., 1.], [0., 2.], [0., 3.]], lib=np)
-    logger.info(X_flat)
-    logger.info(X_flat.shape)
+    # X_flat = arange(100, [[0., 1.], [0., 2.], [0., 3.]], lib=np)
+    # logger.info(X_flat)
+    # logger.info(X_flat.shape)
+    logger.info(find_ckpt_path('e855a0'))

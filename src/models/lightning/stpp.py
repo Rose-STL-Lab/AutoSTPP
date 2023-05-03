@@ -242,6 +242,7 @@ class BaseSTPointProcess(pl.LightningModule):
         device = self.st_x[0][0].device
         indices = self.st_x.keys()
         hessians = []
+        maes = []
         
         if self.hparams.start_idx > max(indices):
             logger.critical("No sequence to plot! The maximum start_idx is %d" % max(indices))
@@ -322,6 +323,13 @@ class BaseSTPointProcess(pl.LightningModule):
                     dist = np.sqrt(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2)) / np.sqrt(2)
                     hessians.append(dist)
             
+            #################### Compute λ MAE ####################
+            if synt is not None:
+                for p, q in zip(lambs, lambs_gt):
+                    lamb_t = np.sum(p) / x_nstep / y_nstep
+                    lamb_t_gt = np.sum(q) / x_nstep / y_nstep
+                    maes.append(abs(lamb_t - lamb_t_gt))
+                    
             ###################### Plotting #######################
             if self.hparams.start_idx != idx:
                 continue  # Skip if not the idx to plot
@@ -354,7 +362,10 @@ class BaseSTPointProcess(pl.LightningModule):
 
         if synt is not None:
             hessian = np.mean(hessians)
+            mae = np.mean(maes)
+            logger.info(f'λt Mean Absolute Error: {mae}')
             logger.info(f'Hessian distance: {hessian}')
+            self.log('lamb_mae', mae)
             self.log('hessian', hessian)
     
     @abstractmethod
