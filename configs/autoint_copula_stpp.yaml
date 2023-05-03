@@ -9,6 +9,7 @@ trainer:
         class_path: aim.pytorch_lightning.AimLogger
         init_args:
             experiment: 'autoint_copula_stpp'
+            # repo: .blackhole
     log_every_n_steps: 1
 model:
     class_path: models.lightning.autoint_copula_stpp.AutoIntCopulaSTPointProcess
@@ -20,11 +21,11 @@ model:
         learning_rate: 0.004
         step_size: 20
         gamma: 0.5
-        nsteps: [51, 51, 101]
+        nsteps: [101, 101, 101]
         round_time: true
         trunc: true
         vis_type: ['interactive', 'static']
-        start_idx: 2
+        start_idx: 0
         name: covid_nj_cases
 data:
     class_path: data.lightning.sliding_window.SlidingWindowDataModule

@@ -21,17 +21,16 @@ model:
         learning_rate: 0.004
         step_size: 20
         gamma: 0.5
-        nsteps: [51, 51, 101]
+        nsteps: [101, 101, 101]
         round_time: true
         trunc: true
         vis_type: ['interactive', 'static']
-        max_history: 10
-        start_idx: 2
-        name: stscp0
+        start_idx: 0
+        name: covid_nj_cases
 data:
     class_path: data.lightning.sliding_window.SlidingWindowDataModule
     init_args:
         batch_size: 128
         num_workers: 8
-        name: stscp0
+        name: covid_nj_cases
         option: ready

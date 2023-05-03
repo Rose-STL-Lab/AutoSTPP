@@ -4,11 +4,12 @@ trainer:
     max_epochs: 50
     # fast_dev_run: True
     accelerator: 'cuda'
-    devices: [2]
+    devices: [0]
     logger:
         class_path: aim.pytorch_lightning.AimLogger
         init_args:
             experiment: 'montecarlo_stpp'
+            # repo: .blackhole
     log_every_n_steps: 1
 model:
     class_path: models.lightning.montecarlo_stpp.MonteCarloSTPointProcess
@@ -25,12 +26,12 @@ model:
         round_time: false
         trunc: true
         vis_type: ['interactive', 'static']
-        start_idx: 5
-        name: stscp0
+        start_idx: 0
+        name: covid_nj_cases
 data:
     class_path: data.lightning.sliding_window.SlidingWindowDataModule
     init_args:
         batch_size: 128
         num_workers: 8
-        name: stscp0
+        name: covid_nj_cases
         option: ready
