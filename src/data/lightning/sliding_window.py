@@ -82,7 +82,9 @@ class SlidingWindowDataModule(pl.LightningDataModule):
             self.sliding_train, 
             batch_size=self.hparams.batch_size, 
             num_workers=self.hparams.num_workers,
-            shuffle=True
+            shuffle=True,
+            persistent_workers=True, 
+            pin_memory=True
         )
 
     def val_dataloader(self):
@@ -90,7 +92,9 @@ class SlidingWindowDataModule(pl.LightningDataModule):
             self.sliding_val, 
             batch_size=self.hparams.batch_size, 
             num_workers=self.hparams.num_workers,
-            shuffle=False
+            shuffle=False,
+            persistent_workers=True, 
+            pin_memory=True
         )
 
     def test_dataloader(self):
@@ -98,7 +102,9 @@ class SlidingWindowDataModule(pl.LightningDataModule):
             self.sliding_test, 
             batch_size=self.hparams.batch_size, 
             num_workers=self.hparams.num_workers,
-            shuffle=False
+            shuffle=False,
+            persistent_workers=True, 
+            pin_memory=True
         )
 
     def predict_dataloader(self):
