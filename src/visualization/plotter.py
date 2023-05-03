@@ -2,6 +2,7 @@ from typing import Union, List
 
 from loguru import logger
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import plotly.graph_objects as go
@@ -103,6 +104,9 @@ def plot_lambst_static(lambs, x_range, y_range, t_range, fps, scaler=None, cmin=
     :param fps: # frame per sec
     :param fn: file_name
     """
+    if type(t_range) is torch.Tensor:
+        t_range = t_range.numpy()
+    
     # Inverse transform the range to the actual scale
     if scaler is not None:
         x_range, y_range, t_range = inverse_transform(x_range, y_range, t_range, scaler)

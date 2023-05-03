@@ -86,7 +86,7 @@ def load_synt(name: str, x_num: int, y_num: int):
         T = 100
         cmax = 3.5
     else:
-        return None, 0.
+        return None, 0., None
         
     synt.load(f'data/raw/spatiotemporal/{name}.data', t_start=0, t_end=10000)
     return synt, T, cmax
@@ -143,10 +143,11 @@ class BaseSTPointProcess(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         
-        self.st_x = []
-        self.st_y = []
-        self.st_x_cum = []
-        self.st_y_cum = []
+        ## Input spatiotemporal X+y by sequence index
+        self.st_x = {}
+        self.st_y = {}
+        self.st_x_cum = {}
+        self.st_y_cum = {}
         
     def on_fit_start(self):
         logger.info(f'model.dtype: {self.dtype}')
@@ -187,17 +188,30 @@ class BaseSTPointProcess(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         st_x, st_y, st_x_cum, st_y_cum, loc = batch
         nll, sll, tll = self(st_x, st_y)
-        mask = loc[0] == self.hparams.start_idx  # Plot the start_idx sequence only
-
         self.log('test_nll', nll.item())
         self.log('test_sll', sll.item())
         self.log('test_tll', tll.item())
+        
+        st_x_dict = {}
+        st_y_dict = {}
+        st_x_cum_dict = {}
+        st_y_cum_dict = {}
+        
+        indices = loc[0].unique()  # All sequence indices in this batch
+        for idx in indices:
+            idx = idx.item()
+            mask = loc[0] == idx
+            st_x_dict[idx] = st_x[mask]
+            st_y_dict[idx] = st_y[mask]
+            st_x_cum_dict[idx] = st_x_cum[mask]
+            st_y_cum_dict[idx] = st_y_cum[mask]
+            
         return {
             'loss': nll,
-            'st_x': st_x[mask],
-            'st_y': st_y[mask],
-            'st_x_cum': st_x_cum[mask],
-            'st_y_cum': st_y_cum[mask]
+            'st_x': st_x_dict,
+            'st_y': st_y_dict,
+            'st_x_cum': st_x_cum_dict,
+            'st_y_cum': st_y_cum_dict
         }
         
     def on_test_batch_end(
@@ -207,107 +221,142 @@ class BaseSTPointProcess(pl.LightningModule):
         batch_idx: int, 
         dataloader_idx: int = 0
     ) -> None:
-        self.st_x.append(outputs['st_x'])
-        self.st_y.append(outputs['st_y'])
-        self.st_x_cum.append(outputs['st_x_cum'])
-        self.st_y_cum.append(outputs['st_y_cum'])
+        indices = outputs['st_x'].keys()
+        
+        for idx in indices: 
+            if idx not in self.st_x:
+                self.st_x[idx] = []
+                self.st_y[idx] = []
+                self.st_x_cum[idx] = []
+                self.st_y_cum[idx] = []
+            
+            self.st_x[idx].append(outputs['st_x'][idx])
+            self.st_y[idx].append(outputs['st_y'][idx])
+            self.st_x_cum[idx].append(outputs['st_x_cum'][idx])
+            self.st_y_cum[idx].append(outputs['st_y_cum'][idx])
         
     def on_test_epoch_end(self):
         if len(self.hparams.vis_type) == 0:
             return  # Skip visualization
         
-        device = self.st_x[0].device
-        ## Stack ST outputs
-        st_x = torch.cat(self.st_x, 0).cpu()
-        st_y = torch.cat(self.st_y, 0).cpu()
-        st_x_cum = torch.cat(self.st_x_cum, 0).cpu()
-        st_y_cum = torch.cat(self.st_y_cum, 0).cpu()
-        lambs = []
+        device = self.st_x[0][0].device
+        indices = self.st_x.keys()
+        hessians = []
         
-        if len(st_x_cum) == 0:
-            logger.critical("No test sequence to plot; Consider changing the start_idx")
-            return
-        
-        st_x_cum_ = st_x_cum.clone()
-        st_x_cum_[:, :, -1] = torch.tensor(np.diff(st_x_cum_[:, :, -1].numpy(), axis=1, prepend=0))
-        scales = (st_x_cum_[0, 2, :] - st_x_cum_[0, 1, :]) / (st_x[0, 2, :] - st_x[0, 1, :])
-        scales = scales.numpy()
-        biases = st_x_cum_[0, 2, :] - st_x[0, 2, :] * scales
-        biases = biases.numpy()
-        
-        x_nstep, y_nstep, t_nstep = self.hparams.nsteps
-        
-        ############## Calculate synthetic intensity ##############
-        synt, T, cmax = load_synt(self.hparams.name, x_nstep, y_nstep)
-        his_st = st_y_cum.squeeze(1).detach().clone().cpu().numpy()
-        his_st[:, -1] += self.hparams.start_idx * T
-        # Calculate the ground truth intensity
-        t_start = his_st[0, -1]
-        t_end = his_st[-1, -1]
-        logger.info(f'Intensity time range : {t_start} ~ {t_end}')
-        
-        if self.hparams.round_time:
-            t_start = float(round(t_start))
-            t_end = float(round(t_end))
-            t_num = int(t_end - t_start) + 1
-            if synt is None:
-                t_num = (t_num - 1) * (t_nstep // t_num) + 1
-        else:
-            t_num = t_nstep
-        t_range = torch.linspace(t_start, t_end, t_num)
-        
-        if synt is not None:
-            lambs_gt, x_range, y_range, t_range = synt.get_lamb_st(x_num=x_nstep, y_num=y_nstep, 
-                                                                   t_num=t_num, t_start=t_start, t_end=t_end)
-            ## Normalized range
-            t_range -= self.hparams.start_idx * T
-            x_range = (torch.Tensor(x_range) - biases[0]) / scales[0]
-            y_range = (torch.Tensor(y_range) - biases[1]) / scales[1]
-        else:
-            if self.hparams.vis_bounds is None:
-                ## Discretize space
-                x_min, x_max, y_min, y_max = 0.0, 1.0, 0.0, 1.0
-            else:
-                ## Normalize space
-                bounds = np.array(self.hparams.vis_bounds)
-                bounds = ((bounds.T - biases) / scales).T
-                [x_min, x_max], [y_min, y_max] = bounds
+        if self.hparams.start_idx > max(indices):
+            logger.critical("No sequence to plot! The maximum start_idx is %d" % max(indices))
             
-            ## Normalized range
-            x_range = torch.linspace(x_min, x_max, x_nstep)
-            y_range = torch.linspace(y_min, y_max, y_nstep)
-    
-        ############## Calculate model intensity ##############
-        lambs = self.calc_lamb(st_x, st_x_cum, st_y, st_y_cum, scales, biases,
-                               x_range, y_range, t_range, device)
+        ############## Loading synthetic dataset ##############
+        x_nstep, y_nstep, t_nstep = self.hparams.nsteps
+        synt, T, cmax = load_synt(self.hparams.name, x_nstep, y_nstep)
+        # synt = None
+        # T = 0
         
-        ## Denormalize space
-        x_range = x_range.numpy() * scales[0] + biases[0]
-        y_range = y_range.numpy() * scales[1] + biases[1]
+        # For each ST sequences
+        for idx in indices:
+            if synt is None and self.hparams.start_idx != idx:
+                continue  # Skip if not the idx to plot
+            
+            ## Stack ST inputs
+            st_x = torch.cat(self.st_x[idx], 0).cpu()
+            st_y = torch.cat(self.st_y[idx], 0).cpu()
+            st_x_cum = torch.cat(self.st_x_cum[idx], 0).cpu()
+            st_y_cum = torch.cat(self.st_y_cum[idx], 0).cpu()
+            
+            st_x_cum_ = st_x_cum.clone()
+            st_x_cum_[:, :, -1] = torch.tensor(np.diff(st_x_cum_[:, :, -1].numpy(), axis=1, prepend=0))
+            scales = (st_x_cum_[0, 2, :] - st_x_cum_[0, 1, :]) / (st_x[0, 2, :] - st_x[0, 1, :])
+            scales = scales.numpy()
+            biases = st_x_cum_[0, 2, :] - st_x[0, 2, :] * scales
+            biases = biases.numpy()
+            
+            ############## Calculate synthetic intensity ##############
+            his_st = st_y_cum.squeeze(1).detach().clone().cpu().numpy()
+            his_st[:, -1] += self.hparams.start_idx * T
+            
+            t_start = his_st[0, -1]
+            t_end = his_st[-1, -1]
+            logger.info(f'Intensity time range : {t_start} ~ {t_end}')
+            
+            ## Round time ranges to nearest decimals
+            if self.hparams.round_time:
+                t_start = float(round(t_start))
+                t_end = float(round(t_end))
+                t_num = int(t_end - t_start) + 1
+                if synt is None:
+                    t_num = (t_num - 1) * (t_nstep // t_num) + 1
+            else:
+                t_num = t_nstep
+            t_range = torch.linspace(t_start, t_end, t_num)
+            
+            if synt is not None:
+                lambs_gt, x_range, y_range, t_range = synt.get_lamb_st(x_num=x_nstep, y_num=y_nstep, 
+                                                                       t_num=t_num, t_start=t_start, t_end=t_end)
+                ## Normalize range
+                t_range -= self.hparams.start_idx * T
+                x_range = (torch.Tensor(x_range) - biases[0]) / scales[0]
+                y_range = (torch.Tensor(y_range) - biases[1]) / scales[1]
+            else:
+                if self.hparams.vis_bounds is None:
+                    ## Discretize space
+                    x_min, x_max, y_min, y_max = 0.0, 1.0, 0.0, 1.0
+                else:
+                    ## Normalize space
+                    bounds = np.array(self.hparams.vis_bounds)
+                    bounds = ((bounds.T - biases) / scales).T
+                    [x_min, x_max], [y_min, y_max] = bounds
+                
+                ## Normalized range
+                x_range = torch.linspace(x_min, x_max, x_nstep)
+                y_range = torch.linspace(y_min, y_max, y_nstep)
         
+            ############## Calculate model intensity ##############
+            lambs = self.calc_lamb(st_x, st_x_cum, st_y, st_y_cum, scales, biases,
+                                   x_range, y_range, t_range, device)
+            
+            ################### Compute Hessian ###################
+            if synt is not None:
+                for p, q in zip(lambs, lambs_gt):
+                    p = p.flatten() / p.sum()
+                    q = q.flatten() / q.sum()
+                    dist = np.sqrt(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2)) / np.sqrt(2)
+                    hessians.append(dist)
+            
+            ###################### Plotting #######################
+            if self.hparams.start_idx != idx:
+                continue  # Skip if not the idx to plot
+            
+            ## Denormalize space
+            x_range = x_range.numpy() * scales[0] + biases[0]
+            y_range = y_range.numpy() * scales[1] + biases[1]
+            
+            if synt is not None:
+                lambs_list = [lambs_gt, lambs]
+                subplot_titles = ['Ground Truth', type(self).__name__]
+            else:
+                cmax = np.array(lambs).max()
+                lambs_list = [lambs]
+                subplot_titles = [type(self).__name__]
+            
+            if 'interactive' in self.hparams.vis_type:
+                fig = plot_lambst_interactive(lambs_list if len(lambs_list) > 1 else lambs_list[0],
+                                              x_range, y_range, t_range, show=False, cauto=True,
+                                              master_title=self.hparams.name,
+                                              subplot_titles=subplot_titles)
+                self.logger.experiment.track(Figure(fig), name='intensity', step=0, context={'subset': 'test'},)
+            
+            if 'static' in self.hparams.vis_type:
+                for lambs, title in zip(lambs_list, subplot_titles):
+                    fig = plot_lambst_static(lambs, x_range, y_range, t_range, history=(his_st[:, :-1], his_st[:, -1]),
+                                             cmax=cmax, fps=12, fn=f'{title}.gif',)
+                    self.logger.experiment.track(Image(f'{title}.gif'), name='static-' + title, 
+                                                 context={'subset': 'test'})
+
         if synt is not None:
-            cmax = max(np.array(lambs_gt).max(), np.array(lambs).max())
-            lambs_list = [lambs_gt, lambs]
-            subplot_titles = ['Ground Truth', type(self).__name__]
-        else:
-            cmax = np.array(lambs).max()
-            lambs_list = [lambs]
-            subplot_titles = [type(self).__name__]
-        
-        if 'interactive' in self.hparams.vis_type:
-            fig = plot_lambst_interactive(lambs_list if len(lambs_list) > 1 else lambs_list[0],
-                                          x_range, y_range, t_range, show=False, cauto=True,
-                                          master_title=self.hparams.name,
-                                          subplot_titles=subplot_titles)
-            self.logger.experiment.track(Figure(fig), name='intensity', step=0, context={'subset': 'test'},)
-        
-        if 'static' in self.hparams.vis_type:
-            for lambs, title in zip(lambs_list, subplot_titles):
-                fig = plot_lambst_static(lambs, x_range, y_range, t_range, history=(his_st[:, :-1], his_st[:, -1]),
-                                         cmax=cmax, fps=12, fn=f'{title}.gif',)
-                self.logger.experiment.track(Image(f'{title}.gif'), name='static-' + title, 
-                                             context={'subset': 'test'})
-        
+            hessian = np.mean(hessians)
+            logger.info(f'Hessian distance: {hessian}')
+            self.log('hessian', hessian)
+    
     @abstractmethod
     def calc_lamb(self, st_x, st_x_cum, st_y, st_y_cum, scales, biases,
                   x_range, y_range, t_range, device):
@@ -332,7 +381,7 @@ class BaseSTPointProcess(pl.LightningModule):
         y_range : torch.Tensor
             Normalized y range for intensity calculation
         t_range : torch.Tensor
-            t range for intensity calculation
+            Unscaled & 0-shifted t range for intensity calculation
         device : torch.device
         """
         pass
