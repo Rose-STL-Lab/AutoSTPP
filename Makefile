@@ -83,7 +83,7 @@ interactive: update_kubeconfig yaml
 	$(eval POD_NAME=$(shell yq eval '.metadata.name' kube/$(dest).yaml))
 	@echo "Waiting for pod $(POD_NAME) to be ready"
 	@kubectl wait --for=condition=Ready pod/$(POD_NAME) --timeout=1h
-	@kubectl port-forward pod/$(POD_NAME) 1552:1551 --address 0.0.0.0
+	@kubectl port-forward pod/$(POD_NAME) 1550:1551 --address 0.0.0.0
 
 job ?= tune_cuboid
 source ?= $(job)
@@ -109,6 +109,7 @@ batch_job:
 		$(eval pref := $(subst _,-,$(config_fn))) \
         $(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-0; \
 		$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-1; \
+		$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-2; \
     )
 
 ## Delete all compiled Python files

@@ -4,6 +4,7 @@ from pytorch_lightning.cli import ArgsType
 from data.lightning.toy3d import Toy3dDataModule
 from models.lightning.cuboid import BaseCuboid
 from cli import MyLightningCLI
+from utils import find_ckpt_path, increase_u_limit
 
 
 def cli_main(args: ArgsType = None):
@@ -22,6 +23,6 @@ def cli_main(args: ArgsType = None):
 
 if __name__ == '__main__':
     cli = cli_main()
-    torch.multiprocessing.set_sharing_strategy('file_system')
+    increase_u_limit()
     cli.trainer.fit(cli.model, cli.datamodule)
     cli.trainer.test(cli.model, cli.datamodule)

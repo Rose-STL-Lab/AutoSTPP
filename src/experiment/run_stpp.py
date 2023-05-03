@@ -4,7 +4,7 @@ from pytorch_lightning.cli import ArgsType
 from data.lightning.sliding_window import SlidingWindowDataModule
 from models.lightning.stpp import BaseSTPointProcess
 from cli import MyLightningCLI
-from utils import find_ckpt_path
+from utils import find_ckpt_path, increase_u_limit
 
 
 def cli_main(args: ArgsType = None):
@@ -23,7 +23,7 @@ def cli_main(args: ArgsType = None):
 
 if __name__ == '__main__':
     cli = cli_main()
-    torch.multiprocessing.set_sharing_strategy('file_system')
+    increase_u_limit()
     # cli.model = cli.model.load_from_checkpoint(
     #     find_ckpt_path('cb6465'),    # Copula-STHP0
     #     # find_ckpt_path('5ca538'),    # Auto-STSCP0

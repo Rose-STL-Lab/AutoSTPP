@@ -26,6 +26,7 @@ import dotenv
 import itertools
 import functools
 import warnings
+import resource
 
 eps = 1e-10
 STEP = 1e-3
@@ -522,6 +523,11 @@ def find_ckpt_path(hash_str, aim_path='.aim'):
                         largest_N_path = checkpoint_path
 
     return largest_N_path
+
+
+def increase_u_limit():
+    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (65536, rlimit[1]))
 
 
 if __name__ == '__main__':
