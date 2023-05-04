@@ -290,23 +290,29 @@ class BaseSTPointProcess(pl.LightningModule):
                 t_num = t_nstep
             t_range = torch.linspace(t_start, t_end, t_num)
             
+            if self.hparams.vis_bounds is not None:
+                ## Normalize space
+                [x_min, x_max], [y_min, y_max] = self.hparams.vis_bounds
+            else:
+                if synt is not None:
+                    if self.hparams.name == 'sthp0':
+                        ## Discretize space
+                        x_min, x_max, y_min, y_max = -2.5, 2.5, -2.5, 2.5
+                    else:
+                        x_min, x_max, y_min, y_max = None, None, None, None
+                else:
+                    x_min, x_max, y_min, y_max = 0.0, 1.0, 0.0, 1.0
+                    
             if synt is not None:
                 lambs_gt, x_range, y_range, t_range = synt.get_lamb_st(x_num=x_nstep, y_num=y_nstep, 
-                                                                       t_num=t_num, t_start=t_start, t_end=t_end)
+                                                                       t_num=t_num, t_start=t_start, t_end=t_end,
+                                                                       x_min=x_min, x_max=x_max, 
+                                                                       y_min=y_min, y_max=y_max)
                 ## Normalize range
                 t_range -= self.hparams.start_idx * T
                 x_range = (torch.Tensor(x_range) - biases[0]) / scales[0]
                 y_range = (torch.Tensor(y_range) - biases[1]) / scales[1]
             else:
-                if self.hparams.vis_bounds is None:
-                    ## Discretize space
-                    x_min, x_max, y_min, y_max = 0.0, 1.0, 0.0, 1.0
-                else:
-                    ## Normalize space
-                    bounds = np.array(self.hparams.vis_bounds)
-                    bounds = ((bounds.T - biases) / scales).T
-                    [x_min, x_max], [y_min, y_max] = bounds
-                
                 ## Normalized range
                 x_range = torch.linspace(x_min, x_max, x_nstep)
                 y_range = torch.linspace(y_min, y_max, y_nstep)
