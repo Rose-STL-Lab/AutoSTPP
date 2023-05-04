@@ -24,6 +24,7 @@ def load_synt(name: str, x_num: int, y_num: int):
     :return synt: the synthetic dataset
     :return t_range: the time range of the dataset
     :return cmax: recommended cmax for plotting
+    :return bounds: x- and y- bounds for plotting
     """
     if name == 'sthp0':
         synt = STHPDataset(s_mu=np.array([0, 0]), 
@@ -35,6 +36,12 @@ def load_synt(name: str, x_num: int, y_num: int):
                             dist_only=False)
         T = 200
         cmax = 0.4
+        bounds = {
+            "x_min": -2.5,
+            "x_max": 2.5,
+            "y_min": -2.5,
+            "y_max": 2.5
+        }
     elif name == 'sthp1':
         synt = STHPDataset(s_mu=np.array([0, 0]), 
                             g0_cov=np.array([[5, 0],
@@ -44,7 +51,8 @@ def load_synt(name: str, x_num: int, y_num: int):
                             alpha=.5, beta=.6, mu=.15,
                             dist_only=False)
         T = 200
-        cmax = 0.4
+        cmax = None
+        bounds = {}
     elif name == 'sthp2':
         synt = STHPDataset(s_mu=np.array([0, 0]), 
                             g0_cov=np.array([[1, 0],
@@ -54,7 +62,8 @@ def load_synt(name: str, x_num: int, y_num: int):
                             alpha=.3, beta=2, mu=1,
                             dist_only=False)
         T = 200
-        cmax = 0.4
+        cmax = None
+        bounds = {}
     elif name == 'stscp0':
         synt = STSCPDataset(g0_cov=np.array([[1, 0],
                                              [0, 1]]),
@@ -64,7 +73,8 @@ def load_synt(name: str, x_num: int, y_num: int):
                             x_num=x_num, y_num=y_num,
                             max_history=100, dist_only=False)
         T = 100
-        cmax = 3.5
+        cmax = None
+        bounds = {}
     elif name == 'stscp1':
         synt = STSCPDataset(g0_cov=np.array([[.4, 0],
                                              [0, .4]]),
@@ -74,7 +84,8 @@ def load_synt(name: str, x_num: int, y_num: int):
                             x_num=x_num, y_num=y_num, lamb_max=4, 
                             max_history=100, dist_only=False)
         T = 100
-        cmax = 3.5
+        cmax = None
+        bounds = {}
     elif name == 'stscp2':
         synt = STSCPDataset(g0_cov=np.array([[.25, 0],
                                              [0, .25]]),
@@ -85,11 +96,12 @@ def load_synt(name: str, x_num: int, y_num: int):
                             max_history=100, dist_only=False)
         T = 100
         cmax = 3.5
+        bounds = {}
     else:
-        return None, 0., None
+        return None, 0., None, {}
         
     synt.load(f'data/raw/spatiotemporal/{name}.data', t_start=0, t_end=10000)
-    return synt, T, cmax
+    return synt, T, cmax, bounds
 
 
 class BaseSTPointProcess(pl.LightningModule):
@@ -102,7 +114,7 @@ class BaseSTPointProcess(pl.LightningModule):
         gamma: float = 0.5,
         name: str = 'sthp0',
         ## Visuailzation params
-        start_idx: int = 2,
+        start_idx: Union[int, List[int]] = 2,
         vis_bounds: List[List[float]] = None,
         nsteps: List[int] = [101, 101, 201],
         round_time: bool = True,
@@ -123,7 +135,7 @@ class BaseSTPointProcess(pl.LightningModule):
             Scheduler gamma
         name: str, optional
             Name of the dataset, plot intensity if synthetic
-        start_idx: int optional
+        start_idx: Union[int, List[int]] optional
             The idx of sequence in test set to be plotted
         vis_bounds: List[List[float]], optional
             The 2x2 [[xmin, xmax], [ymin, ymax]] bounds for intensity visualization
@@ -244,18 +256,23 @@ class BaseSTPointProcess(pl.LightningModule):
         hessians = []
         maes = []
         
-        if self.hparams.start_idx > max(indices):
+        if type(self.hparams.start_idx) is int:
+            start_idx = [self.hparams.start_idx]
+        else:
+            start_idx = self.hparams.start_idx
+        
+        if min(start_idx) > max(indices):
             logger.critical("No sequence to plot! The maximum start_idx is %d" % max(indices))
             
         ############## Loading synthetic dataset ##############
         x_nstep, y_nstep, t_nstep = self.hparams.nsteps
-        synt, T, cmax = load_synt(self.hparams.name, x_nstep, y_nstep)
+        synt, T, cmax, bounds = load_synt(self.hparams.name, x_nstep, y_nstep)
         # synt = None
         # T = 0
         
         # For each ST sequences
         for idx in indices:
-            if synt is None and self.hparams.start_idx != idx:
+            if synt is None and idx not in start_idx:
                 continue  # Skip if not the idx to plot
             
             ## Stack ST inputs
@@ -273,7 +290,7 @@ class BaseSTPointProcess(pl.LightningModule):
             
             ############## Calculate synthetic intensity ##############
             his_st = st_y_cum.squeeze(1).detach().clone().cpu().numpy()
-            his_st[:, -1] += self.hparams.start_idx * T
+            his_st[:, -1] += idx * T
             
             t_start = his_st[0, -1]
             t_end = his_st[-1, -1]
@@ -293,29 +310,26 @@ class BaseSTPointProcess(pl.LightningModule):
             if self.hparams.vis_bounds is not None:
                 ## Normalize space
                 [x_min, x_max], [y_min, y_max] = self.hparams.vis_bounds
-            else:
-                if synt is not None:
-                    if self.hparams.name == 'sthp0':
-                        ## Discretize space
-                        x_min, x_max, y_min, y_max = -2.5, 2.5, -2.5, 2.5
-                    else:
-                        x_min, x_max, y_min, y_max = None, None, None, None
-                else:
-                    x_min, x_max, y_min, y_max = 0.0, 1.0, 0.0, 1.0
+                bounds = {
+                    "x_min": x_min,
+                    "x_max": x_max,
+                    "y_min": y_min,
+                    "y_max": y_max
+                }
                     
             if synt is not None:
                 lambs_gt, x_range, y_range, t_range = synt.get_lamb_st(x_num=x_nstep, y_num=y_nstep, 
                                                                        t_num=t_num, t_start=t_start, t_end=t_end,
-                                                                       x_min=x_min, x_max=x_max, 
-                                                                       y_min=y_min, y_max=y_max)
+                                                                       **bounds)
                 ## Normalize range
-                t_range -= self.hparams.start_idx * T
+                t_range -= idx * T
                 x_range = (torch.Tensor(x_range) - biases[0]) / scales[0]
                 y_range = (torch.Tensor(y_range) - biases[1]) / scales[1]
             else:
                 ## Normalized range
-                x_range = torch.linspace(x_min, x_max, x_nstep)
-                y_range = torch.linspace(y_min, y_max, y_nstep)
+                lambs_gt = None
+                x_range = torch.linspace(0.0, 1.0, x_nstep)
+                y_range = torch.linspace(0.0, 1.0, y_nstep)
         
             ############## Calculate model intensity ##############
             lambs = self.calc_lamb(st_x, st_x_cum, st_y, st_y_cum, scales, biases,
@@ -337,18 +351,24 @@ class BaseSTPointProcess(pl.LightningModule):
                     maes.append(abs(lamb_t - lamb_t_gt))
                     
             ###################### Plotting #######################
-            if self.hparams.start_idx != idx:
+            if idx not in start_idx:
                 continue  # Skip if not the idx to plot
             
-            ## Denormalize space
+            ## Denormalize
             x_range = x_range.numpy() * scales[0] + biases[0]
             y_range = y_range.numpy() * scales[1] + biases[1]
+            his_st[:, -1] -= idx * T
+            
+            if cmax is None:
+                if lambs_gt is not None:
+                    cmax = np.array([lambs_gt, lambs]).max()
+                else:
+                    cmax = np.array(lambs).max()
             
             if synt is not None:
                 lambs_list = [lambs_gt, lambs]
                 subplot_titles = ['Ground Truth', type(self).__name__]
             else:
-                cmax = np.array(lambs).max()
                 lambs_list = [lambs]
                 subplot_titles = [type(self).__name__]
             
@@ -357,13 +377,13 @@ class BaseSTPointProcess(pl.LightningModule):
                                               x_range, y_range, t_range, show=False, cauto=True,
                                               master_title=self.hparams.name,
                                               subplot_titles=subplot_titles)
-                self.logger.experiment.track(Figure(fig), name='intensity', step=0, context={'subset': 'test'},)
+                self.logger.experiment.track(Figure(fig), name=f'intensity-{idx}', step=0, context={'subset': 'test'},)
             
             if 'static' in self.hparams.vis_type:
                 for lambs, title in zip(lambs_list, subplot_titles):
                     fig = plot_lambst_static(lambs, x_range, y_range, t_range, history=(his_st[:, :-1], his_st[:, -1]),
                                              cmax=cmax, fps=12, fn=f'{title}.gif',)
-                    self.logger.experiment.track(Image(f'{title}.gif'), name='static-' + title, 
+                    self.logger.experiment.track(Image(f'{title}.gif'), name=f'static-{idx}-{title}', 
                                                  context={'subset': 'test'})
 
         if synt is not None:

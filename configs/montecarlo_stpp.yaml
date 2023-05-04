@@ -23,10 +23,10 @@ model:
         step_size: 20
         gamma: 0.5
         nsteps: [101, 101, 101]
-        round_time: false
+        round_time: true
         trunc: true
         vis_type: ['interactive', 'static']
-        start_idx: 0
+        start_idx: [0, 2]
         name: covid_nj_cases
 data:
     class_path: data.lightning.sliding_window.SlidingWindowDataModule

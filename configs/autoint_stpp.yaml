@@ -25,12 +25,12 @@ model:
         round_time: true
         trunc: true
         vis_type: ['interactive', 'static']
-        start_idx: 0
-        name: covid_nj_cases
+        start_idx: [0, 2]
+        name: earthquakes_jp
 data:
     class_path: data.lightning.sliding_window.SlidingWindowDataModule
     init_args:
         batch_size: 128
         num_workers: 8
-        name: covid_nj_cases
+        name: earthquakes_jp
         option: ready
