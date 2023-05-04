@@ -107,8 +107,11 @@ batch_job:
         yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/$(config_fn).yaml && \
         $(eval postf := $(subst _,-,$(name))) \
 		$(eval pref := $(subst _,-,$(config_fn))) \
+		yq -I4 -i '(.seed_everything |= 1551)' configs/$(config_fn).yaml; \
         $(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-0; \
+		yq -I4 -i '(.seed_everything |= 1552)' configs/$(config_fn).yaml; \
 		$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-1; \
+		yq -I4 -i '(.seed_everything |= 1553)' configs/$(config_fn).yaml; \
 		$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-2; \
     )
 
