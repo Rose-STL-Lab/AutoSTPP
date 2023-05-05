@@ -123,7 +123,7 @@ class BaseSTPointProcess(pl.LightningModule):
         vis_batch_size: int = 8192,
         vis_type: List[str] = ['interactive']
     ):
-        """Spatiotemporal Point Process Model
+        """ABSTRACT Spatiotemporal Point Process Model
         
         Parameters
         ----------
@@ -151,7 +151,6 @@ class BaseSTPointProcess(pl.LightningModule):
             The type of visualization, 'interactive' or 'static', can be neither or both
         """
         super().__init__()
-        self.save_hyperparameters()
         
         ## Input spatiotemporal X+y by sequence index
         self.st_x = {}
