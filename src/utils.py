@@ -476,7 +476,7 @@ def get_minmax(seqs, roll=True, device=torch.device("cuda:0")):
     return min, max
 
 
-def scale_ll(dataloader, nll, sll, tll):
+def scale_ll(dataloader, nll, sll, tll, scales=None):
     """
     Scale the log likelihoods to the original scale
     
@@ -484,11 +484,20 @@ def scale_ll(dataloader, nll, sll, tll):
     :param nll: the negative total log likelihood
     :param sll: the spatial log likelihood
     :param tll: the temporal log likelihood
+    :param scales: a list of (s0_scale, s1_scale, t_scale), if dataloader is not given
     """
-    assert hasattr(dataloader.dataset, 'max') and hasattr(dataloader.dataset, 'min')
-    s0_scale, s1_scale, t_scale = dataloader.dataset.max - dataloader.dataset.min
-    t_scale = torch.log(t_scale)
-    s_scale = torch.log(s0_scale * s1_scale)
+    if dataloader is not None:
+        assert hasattr(dataloader.dataset, 'max') and hasattr(dataloader.dataset, 'min')
+        s0_scale, s1_scale, t_scale = dataloader.dataset.max - dataloader.dataset.min
+    else:
+        assert scales is not None
+        s0_scale, s1_scale, t_scale = scales
+    if type(t_scale) == torch.Tensor:
+        t_scale = t_scale.item()
+        s0_scale = s0_scale.item()
+        s1_scale = s1_scale.item()
+    t_scale = np.log(t_scale)
+    s_scale = np.log(s0_scale * s1_scale)
     return nll + s_scale + t_scale, sll - s_scale, tll - t_scale
 
 

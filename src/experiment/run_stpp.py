@@ -25,10 +25,7 @@ if __name__ == '__main__':
     cli = cli_main()
     increase_u_limit()
     # cli.model = cli.model.load_from_checkpoint(
-    #     find_ckpt_path('cb6465'),    # Copula-STHP0
-    #     # find_ckpt_path('5ca538'),    # Auto-STSCP0
-    #     # find_ckpt_path('86363e'),    # Auto-Earthquake
-    #     # find_ckpt_path('e855a0'),    # Monte-STSCP0
+    #     find_ckpt_path('10f8eb'),    # Auto-STHP0
     #     **cli.model.hparams
     # )
     cli.trainer.fit(cli.model, cli.datamodule)

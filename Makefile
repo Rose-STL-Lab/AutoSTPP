@@ -105,15 +105,27 @@ batch_job:
 	@sed -i 's,configs/[^[:space:]]*.yaml,configs/$(config_fn).yaml,g' kube/$(job_name).yaml	
 	$(foreach name, $(BATCH_NAMES), \
         yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/$(config_fn).yaml && \
-        $(eval postf := $(subst _,-,$(name))) \
+		$(eval postf := $(subst _,-,$(name))) \
 		$(eval pref := $(subst _,-,$(config_fn))) \
 		yq -I4 -i '(.seed_everything |= 1551)' configs/$(config_fn).yaml; \
-        $(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-0; \
+        if kubectl get job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-0 > /dev/null 2>&1; then \
+			echo "Job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-0 already exists"; \
+		else \
+			$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-0; \
+		fi; \
 		yq -I4 -i '(.seed_everything |= 1552)' configs/$(config_fn).yaml; \
-		$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-1; \
+		if kubectl get job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-1 > /dev/null 2>&1; then \
+			echo "Job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-1 already exists"; \
+		else \
+			$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-1; \
+		fi; \
 		yq -I4 -i '(.seed_everything |= 1553)' configs/$(config_fn).yaml; \
-		$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-2; \
-    )
+		if kubectl get job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-2 > /dev/null 2>&1; then \
+			echo "Job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-2 already exists"; \
+		else \
+			$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-2; \
+		fi; \
+	)
 
 ## Delete all compiled Python files
 clean:
@@ -203,9 +215,10 @@ else
 endif
 	@aim up --port 1551 --host 0.0.0.0 --repo ${RESULT_DIR}.aim/
 
+repo ?= .aim/
 ## View Latest Local Results
 local_results: 
-	@aim up --port 1551 --host 0.0.0.0 --repo .aim/
+	@aim up --port 1551 --host 0.0.0.0 --repo $(repo)
 
 ## Delete all remote results; Run with caution
 clean_results:

@@ -10,6 +10,7 @@ from typing import List
 from visualization.plotter import plot_lambst_interactive, plot_lambst_static
 from data.synthetic import STHPDataset, STSCPDataset
 from abc import abstractmethod
+from utils import scale_ll
 
 
 def load_synt(name: str, x_num: int, y_num: int):
@@ -161,6 +162,9 @@ class BaseSTPointProcess(pl.LightningModule):
         self.st_x_cum = {}
         self.st_y_cum = {}
         
+        self.scales = [1., 1., 1.]
+        self.biases = [0., 0., 0.]
+        
     def on_fit_start(self):
         logger.info(f'model.dtype: {self.dtype}')
         logger.info(self)
@@ -175,34 +179,53 @@ class BaseSTPointProcess(pl.LightningModule):
     ) -> None:
         super().optimizer_step(epoch, batch_idx, optimizer, optimizer_closure)
         self.project()
+        
+    def calc_norm(self, st_x, st_x_cum):
+        st_x_cum = st_x_cum.clone().detach().cpu()
+        st_x = st_x.detach().cpu()
+        st_x_cum[:, :, -1] = torch.tensor(np.diff(st_x_cum[:, :, -1].numpy(), axis=1, prepend=0))
+        self.scales = (st_x_cum[0, 2, :] - st_x_cum[0, 1, :]) / (st_x[0, 2, :] - st_x[0, 1, :])
+        self.scales = self.scales.numpy()
+        self.biases = st_x_cum[0, 2, :] - st_x[0, 2, :] * self.scales
+        self.biases = self.biases.numpy()
 
     def training_step(self, batch, batch_idx):
-        st_x, st_y, _, _, _ = batch
+        st_x, st_y, st_x_cum, _, _ = batch
         nll, sll, tll = self(st_x, st_y)
+        
+        if type(self.scales) is list:
+            self.calc_norm(st_x, st_x_cum)
+        nll_scaled, sll_scaled, tll_scaled = scale_ll(None, nll, sll, tll, self.scales)
         
         if torch.isnan(nll):
             logger.error("Numerical error, quiting...")
             
-        self.log('train_nll', nll.item())
-        self.log('train_sll', sll.item())
-        self.log('train_tll', tll.item())
+        self.log('train_nll', nll_scaled.item())
+        self.log('train_sll', sll_scaled.item())
+        self.log('train_tll', tll_scaled.item())
         return nll
 
     def validation_step(self, batch, batch_idx):
         st_x, st_y, _, _, _ = batch
         nll, sll, tll = self(st_x, st_y)
+        nll_scaled, sll_scaled, tll_scaled = scale_ll(None, nll, sll, tll, self.scales)
 
-        self.log('val_nll', nll.item())
-        self.log('val_sll', sll.item())
-        self.log('val_tll', tll.item())
+        self.log('val_nll', nll_scaled.item())
+        self.log('val_sll', sll_scaled.item())
+        self.log('val_tll', tll_scaled.item())
         return nll
 
     def test_step(self, batch, batch_idx):
         st_x, st_y, st_x_cum, st_y_cum, loc = batch
         nll, sll, tll = self(st_x, st_y)
-        self.log('test_nll', nll.item())
-        self.log('test_sll', sll.item())
-        self.log('test_tll', tll.item())
+        
+        if type(self.scales) is list:
+            self.calc_norm(st_x, st_x_cum)
+        nll_scaled, sll_scaled, tll_scaled = scale_ll(None, nll, sll, tll, self.scales)
+            
+        self.log('test_nll', nll_scaled.item())
+        self.log('test_sll', sll_scaled.item())
+        self.log('test_tll', tll_scaled.item())
         
         st_x_dict = {}
         st_y_dict = {}
@@ -281,12 +304,8 @@ class BaseSTPointProcess(pl.LightningModule):
             st_x_cum = torch.cat(self.st_x_cum[idx], 0).cpu()
             st_y_cum = torch.cat(self.st_y_cum[idx], 0).cpu()
             
-            st_x_cum_ = st_x_cum.clone()
-            st_x_cum_[:, :, -1] = torch.tensor(np.diff(st_x_cum_[:, :, -1].numpy(), axis=1, prepend=0))
-            scales = (st_x_cum_[0, 2, :] - st_x_cum_[0, 1, :]) / (st_x[0, 2, :] - st_x[0, 1, :])
-            scales = scales.numpy()
-            biases = st_x_cum_[0, 2, :] - st_x[0, 2, :] * scales
-            biases = biases.numpy()
+            scales = self.scales
+            biases = self.biases
             
             ############## Calculate synthetic intensity ##############
             his_st = st_y_cum.squeeze(1).detach().clone().cpu().numpy()
