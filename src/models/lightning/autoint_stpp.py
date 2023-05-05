@@ -15,6 +15,7 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         num_layers: int = 2,
         activation: str = 'tanh',
         bias: bool = True,
+        trunc: bool = False,
         **kwargs  # for BaseSTPointProcess
     ) -> None:
         """AutoInt Point Process
@@ -32,6 +33,8 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
             Activation function of each ProdNet component
         bias : bool
             Whether to use bias in each ProdNet component
+        trunc: bool, optional
+            Whether to truncate the history for intensity computation
         """ 
         super().__init__(**kwargs)
         self.save_hyperparameters()

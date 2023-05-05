@@ -119,7 +119,6 @@ class BaseSTPointProcess(pl.LightningModule):
         vis_bounds: List[List[float]] = None,
         nsteps: List[int] = [101, 101, 201],
         round_time: bool = True,
-        trunc: bool = False,
         max_history: int = 20,
         vis_batch_size: int = 8192,
         vis_type: List[str] = ['interactive']
@@ -144,8 +143,6 @@ class BaseSTPointProcess(pl.LightningModule):
             The number of steps to visualize for each dimension (x, y, t)
         round_time: bool, optional
             Whether to round time range to integers between, then t_nstep will be ignored
-        trunc: bool, optional
-            Whether to truncate the history for intensity computation
         max_history: int, optional
             The maximum history length to truncate, ignored if trunc is False
         vis_batch_size: int, optional
