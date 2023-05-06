@@ -100,31 +100,23 @@ BATCH_NAMES = sthp0 sthp1 sthp2 stscp0 stscp1 stscp2 earthquakes_jp covid_nj_cas
 job_name ?= stpp
 # Lightning config filename
 config_fn ?= autoint_copula_stpp
-## Launch jobs for all datasets 
+# Seed list
+SEEDS ?= 1551 1552 1553
+## Launch jobs for all datasets
 batch_job: 
 	@sed -i 's,configs/[^[:space:]]*.yaml,configs/$(config_fn).yaml,g' kube/$(job_name).yaml	
 	$(foreach name, $(BATCH_NAMES), \
         yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/$(config_fn).yaml && \
 		$(eval postf := $(subst _,-,$(name))) \
 		$(eval pref := $(subst _,-,$(config_fn))) \
-		yq -I4 -i '(.seed_everything |= 1551)' configs/$(config_fn).yaml; \
-        if kubectl get job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-0 > /dev/null 2>&1; then \
-			echo "Job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-0 already exists"; \
-		else \
-			$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-0; \
-		fi; \
-		yq -I4 -i '(.seed_everything |= 1552)' configs/$(config_fn).yaml; \
-		if kubectl get job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-1 > /dev/null 2>&1; then \
-			echo "Job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-1 already exists"; \
-		else \
-			$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-1; \
-		fi; \
-		yq -I4 -i '(.seed_everything |= 1553)' configs/$(config_fn).yaml; \
-		if kubectl get job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-2 > /dev/null 2>&1; then \
-			echo "Job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-2 already exists"; \
-		else \
-			$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-2; \
-		fi; \
+		$(foreach seed, $(SEEDS), \
+			yq -I4 -i '(.seed_everything |= $(seed))' configs/$(config_fn).yaml; \
+			if kubectl get job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-$(seed) > /dev/null 2>&1; then \
+				echo "Job $(PROJECT_NAME)-$(job_name)-$(pref)-$(postf)-$(seed) already exists"; \
+			else \
+				$(MAKE) job job=$(job_name) postfix=-$(pref)-$(postf)-$(seed); \
+			fi; \
+		) \
 	)
 
 ## Delete all compiled Python files
