@@ -27,6 +27,7 @@ import itertools
 import functools
 import warnings
 import resource
+import importlib
 
 eps = 1e-10
 STEP = 1e-3
@@ -532,6 +533,25 @@ def find_ckpt_path(hash_str, aim_path='.aim'):
                         largest_N_path = checkpoint_path
 
     return largest_N_path
+
+
+def load_class(info: dict):
+    assert 'path' in info
+    assert 'args' in info
+    class_path = info['path']
+    init_args = info['args']
+    
+    # Split the class path into module and class names
+    module_name, class_name = class_path.rsplit(".", 1)
+
+    # Import the module
+    module = importlib.import_module(module_name)
+    
+    # Load the class and initialize with the given arguments
+    cls = getattr(module, class_name)
+    instance = cls(**init_args)
+    
+    return instance
 
 
 def increase_u_limit():

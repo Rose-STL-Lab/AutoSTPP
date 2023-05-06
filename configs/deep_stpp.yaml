@@ -1,0 +1,70 @@
+seed_everything: 1553
+trainer:
+    precision: 32
+    max_epochs: 50
+    # fast_dev_run: True
+    accelerator: 'cuda'
+    devices: [0]
+    logger:
+        class_path: aim.pytorch_lightning.AimLogger
+        init_args:
+            experiment: 'deep_stpp'
+            repo: .blackhole
+    log_every_n_steps: 1
+model:
+    class_path: models.lightning.deep_stpp.DeepSTPointProcess
+    init_args:
+        enc:
+            path: models.lightning.deep_stpp.TransformerEncoder
+            args:
+                emb_dim: 128
+                z_dim: 128
+                dropout: 0
+                num_head: 2
+                seq_len: 20
+                enc_n_layers: 3
+                enc_hid_dim: 128
+        w_dec:
+            path: models.lightning.deep_stpp.MLPDecoder
+            args:
+                dec_hid_dim: 128
+                dec_n_layers: 3
+                softplus: true
+        s_dec:
+            path: models.lightning.deep_stpp.MLPDecoder
+            args:
+                dec_hid_dim: 128
+                dec_n_layers: 3
+                softplus: true
+        b_dec:
+            path: models.lightning.deep_stpp.MLPDecoder
+            args:
+                dec_hid_dim: 128
+                dec_n_layers: 3
+                softplus: false
+        seq_len: 20
+        s_min: 1.0e-4
+        s_max: null
+        b_max: 20
+        lookahead: 1
+        beta: 1.0e-3
+        num_points: 20
+        clip: 1.0
+        constrain_b: false
+        sample: false
+        # Base and visualization params
+        learning_rate: 0.0003
+        step_size: 50
+        gamma: 0.2
+        nsteps: [101, 101, 101]
+        round_time: true
+        vis_type: ['interactive', 'static']
+        start_idx: [0, 2]
+        name: sthp0
+data:
+    class_path: data.lightning.sliding_window.SlidingWindowDataModule
+    init_args:
+        batch_size: 128
+        num_workers: 8
+        name: sthp0
+        option: ready
