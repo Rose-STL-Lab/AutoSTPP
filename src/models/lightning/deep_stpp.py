@@ -387,13 +387,22 @@ class DeepSTPointProcess(BaseSTPointProcess):
         for t in tqdm(t_range):
             i = sum(st_x_cum[:, -1, -1] <= t) - 1  # Index of corresponding history events
 
-            st_x_ = st_x[i:i + 1]
-            w_i_ = w_i[i:i + 1]
-            b_i_ = b_i[i:i + 1]
-            inv_var_ = inv_var[i:i + 1]
+            if i >= 0:
+                st_x_ = st_x[i:i + 1]
+                w_i_ = w_i[i:i + 1]
+                b_i_ = b_i[i:i + 1]
+                inv_var_ = inv_var[i:i + 1]
 
-            t_ = t - st_x_cum[i:i + 1, -1, -1]  # Time since lastest event
-            t_ = (t_ - biases[-1]) / scales[-1]
+                t_ = t - st_x_cum[i:i + 1, -1, -1]  # Time since lastest event
+                t_ = (t_ - biases[-1]) / scales[-1]
+            else:
+                ## To accommadate time range before first event
+                i_ = torch.searchsorted(st_x_cum[0, :, -1].contiguous(), t)
+                st_x_ = torch.cat((torch.zeros_like(st_x[:1, i_:]), st_x[:1, :i_]), 1)
+                _, w_i_, b_i_, inv_var_ = self.encode(st_x_.to(device))
+                
+                t_ = t - st_x_cum[0, i_ - 1, -1]  # Time since lastest event
+                t_ = (t_ - biases[-1]) / scales[-1]
 
             # Calculate temporal intensity
             t_cum = torch.cumsum(st_x_[..., -1], -1)

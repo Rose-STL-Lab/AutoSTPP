@@ -267,8 +267,8 @@ class BaseSTPointProcess(pl.LightningModule):
             self.st_y_cum[idx].append(outputs['st_y_cum'][idx])
         
     def on_test_epoch_end(self):
-        if len(self.hparams.vis_type) == 0:
-            return  # Skip visualization
+        # if len(self.hparams.vis_type) == 0:
+        #     return  # Skip visualization
         
         device = self.st_x[0][0].device
         indices = self.st_x.keys()
