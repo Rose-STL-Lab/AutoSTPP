@@ -160,6 +160,7 @@ class BaseSTPointProcess(pl.LightningModule):
         
         self.scales = [1., 1., 1.]
         self.biases = [0., 0., 0.]
+        self.early_stop = False
         
     def on_fit_start(self):
         logger.info(f'model.dtype: {self.dtype}')
@@ -193,8 +194,9 @@ class BaseSTPointProcess(pl.LightningModule):
             self.calc_norm(st_x, st_x_cum)
         nll_scaled, sll_scaled, tll_scaled = scale_ll(None, nll, sll, tll, self.scales)
         
-        if torch.isnan(nll):
+        if torch.isnan(nll) and not self.early_stop:
             logger.error("Numerical error, quiting...")
+            self.early_stop = True
             
         self.log('train_nll', nll_scaled.item())
         self.log('train_sll', sll_scaled.item())
@@ -244,6 +246,10 @@ class BaseSTPointProcess(pl.LightningModule):
             'st_x_cum': st_x_cum_dict,
             'st_y_cum': st_y_cum_dict
         }
+    
+    def on_train_batch_start(self, batch, batch_idx):
+        if self.early_stop:
+            return -1
         
     def on_test_batch_end(
         self, 

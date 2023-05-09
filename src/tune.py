@@ -48,7 +48,7 @@ def cli_main(args, model_config, data_config):
 def train_model(config, tune_config):
     with mock.patch("sys.argv", [""]):
         args = ["-c", tune_config['lightning']['config'],
-                "--trainer.callbacks+=ray.tune.integration.pytorch_lightning.TuneReportCallback",
+                "--trainer.callbacks=ray.tune.integration.pytorch_lightning.TuneReportCallback",
                 f"--trainer.callbacks.metrics={{'loss': '{tune_config['lightning']['loss']}'}}",
                 "--trainer.callbacks.on=validation_end",
                 "--trainer.enable_checkpointing=false",

@@ -536,10 +536,10 @@ def find_ckpt_path(hash_str, aim_path='.aim'):
 
 
 def load_class(info: dict):
-    assert 'path' in info
-    assert 'args' in info
-    class_path = info['path']
-    init_args = info['args']
+    assert 'init_args' in info
+    assert 'class_path' in info
+    class_path = info['class_path']
+    init_args = info['init_args']
     
     # Split the class path into module and class names
     module_name, class_name = class_path.rsplit(".", 1)

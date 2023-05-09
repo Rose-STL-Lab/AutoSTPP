@@ -113,12 +113,12 @@ SEEDS ?= 1551 1552 1553
 batch_job: 
 	@sed -i 's,configs/[^[:space:]]*.yaml,configs/$(config_fn).yaml,g' kube/$(job_name).yaml	
 	$(foreach name, $(BATCH_NAMES), \
-		[ $(name) == "earthquakes_jp" ] && \
+		[ $(name) == "earthquakes_jp" ] && ( \
 			yq -I4 -i '((.. | select(has("constrain_b"))).constrain_b |= "sigmoid")' configs/$(config_fn).yaml; \
 			yq -I4 -i '((.. | select(has("s_min"))).s_min |= 1.0e-3)' configs/$(config_fn).yaml \
-		|| \
+		) || ( \
 			yq -I4 -i '((.. | select(has("constrain_b"))).constrain_b |= false)' configs/$(config_fn).yaml; \
-			yq -I4 -i '((.. | select(has("s_min"))).s_min |= 1.0e-4)' configs/$(config_fn).yaml; \
+			yq -I4 -i '((.. | select(has("s_min"))).s_min |= 1.0e-4)' configs/$(config_fn).yaml); \
 		yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/$(config_fn).yaml && \
 		$(eval postf := $(subst _,-,$(name))) \
 		$(eval pref := $(subst _,-,$(config_fn))) \

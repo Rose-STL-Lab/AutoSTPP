@@ -276,9 +276,9 @@ class DeepSTPointProcess(BaseSTPointProcess):
         """
         super(DeepSTPointProcess, self).__init__(**kwargs)
         out_dim = seq_len + num_points
-        w_dec['args'].update({'out_dim': out_dim})
-        b_dec['args'].update({'out_dim': out_dim})
-        s_dec['args'].update({'out_dim': out_dim * 2})
+        w_dec['init_args'].update({'out_dim': out_dim})
+        b_dec['init_args'].update({'out_dim': out_dim})
+        s_dec['init_args'].update({'out_dim': out_dim * 2})
         
         self.save_hyperparameters()
         

@@ -25,8 +25,9 @@ if __name__ == '__main__':
     cli = cli_main()
     increase_u_limit()
     # cli.model = cli.model.load_from_checkpoint(
-    #     find_ckpt_path('10f8eb'),    # Auto-STHP0
+    #     find_ckpt_path('b7443a', aim_path='.blackhole/.aim'),
     #     **cli.model.hparams
     # )
+    # cli.trainer.test(cli.model, cli.datamodule)
     cli.trainer.fit(cli.model, cli.datamodule)
-    cli.trainer.test(cli.model, cli.datamodule)
+    cli.trainer.test(cli.model, cli.datamodule, ckpt_path='best')
