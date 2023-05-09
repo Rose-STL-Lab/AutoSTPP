@@ -126,9 +126,8 @@ def wandb_init(caller_fn: str) -> None:
             else:
                 wandb_config[f'{key} ({fixture_name})'] = config[fixture_name][key]
                 
-    wandb.init(mode='disabled')
-    # wandb.init(project=pytest.fn, entity='point-process', config=wandb_config)
-    wandb.init(mode="disabled")
+    wandb.init(project=pytest.fn, entity='point-process', config=wandb_config)
+    # wandb.init(mode="disabled")
     
     
 def wandb_discard(id) -> None:

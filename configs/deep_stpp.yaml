@@ -54,7 +54,7 @@ model:
         beta: 1.0e-3
         num_points: 20
         clip: 1.0
-        constrain_b: sigmoid
+        constrain_b: clamp
         sample: false
         # Base and visualization params
         learning_rate: 0.0003

@@ -10,7 +10,7 @@ class Namespace:
         self.__dict__.update(kwargs)
            
                 
-config = Namespace(hid_dim=128, emb_dim=128, out_dim=0, n_layers=1, 
+config = Namespace(hid_dim=128, emb_dim=128, out_dim=0, n_layers=1, s_max=None,
                    lr=0.0003, momentum=0.9, epochs=50, batch=128, opt='Adam', generate_type=True,
                    read_model=False, seq_len=20, eval_epoch=5, s_min=1e-4, b_max=20, 
                    lookahead=1, alpha=0.1, z_dim=128, beta=1e-3, dropout=0, num_head=2,
@@ -194,7 +194,7 @@ def trained_model(model, cuboid, dataloader, device, request):
                     'val_losses': val_losses,
                 }, model_fn)
             
-    model.load_state_dict(torch.load(model_fn, map_location=device)['model_state_dict'])
+    model.load_state_dict(torch.load(model_fn)['model_state_dict'])
     if isinstance(wandb.run, wandb.sdk.wandb_run.Run):
         shutil.copy(model_fn, f'{model_fn[:-4]}-{wandb.run.name}.pkl')
     
