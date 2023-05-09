@@ -10,7 +10,7 @@ import pytorch_lightning as pl
 from tqdm import tqdm
 from models.lightning.stpp import BaseSTPointProcess
 
-from typing import List, Tuple, Dict
+from typing import Dict, Union
 from utils import load_class
 
 
@@ -267,7 +267,7 @@ class DeepSTPointProcess(BaseSTPointProcess):
         beta: float = 1e-3,
         num_points: int = 20,
         clip: float = 1.0,
-        constrain_b: bool = False,
+        constrain_b: Union[bool, str] = False,
         sample: bool = False,
         **kwargs  # for BaseSTPointProcess
     ):  

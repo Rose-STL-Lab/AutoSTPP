@@ -13,7 +13,8 @@ PROJECT_NAME = autoint
 PYTHON_INTERPRETER = python3
 RESULT_DIR = results/
 BUCKET_NAME = autoint
-DESTINATION_PATH = "s3://${BUCKET_NAME}/results/"
+S3_PATH = s3://${BUCKET_NAME}/
+RESULT_PATH = "s3://${BUCKET_NAME}/results/"
 MODEL_PATH = "s3://${BUCKET_NAME}/models/"
 CONFIG_PREFIX = autoint-configs
 
@@ -65,8 +66,14 @@ update_kubeconfig:
 	@yq -i '(.volumes[] | select(.name == "$(CONFIG_PREFIX)")).configMap.name |= "$(CONFIG_PREFIX)$(postfix)"' kube/template.yaml
 # @kubectl create configmap autoint-s3cfg --from-file=/home/ubuntu/.s3cfg
 
+ITEMS = item1 item2 item3
 test:
-	@echo $(HAS_CONDA)
+	$(foreach item,$(ITEMS), \
+		[ $(item) == "item2" ] && \
+			echo "Skipping $(item)" \
+		|| \
+			echo "Processing $(item)"; \
+	)
 
 yaml: 
 	@yq '((.. | select(has("command"))).command |= load("kube/startup.yaml") + .)' kube/$(source).yaml > kube/$(dest).yaml
@@ -106,7 +113,13 @@ SEEDS ?= 1551 1552 1553
 batch_job: 
 	@sed -i 's,configs/[^[:space:]]*.yaml,configs/$(config_fn).yaml,g' kube/$(job_name).yaml	
 	$(foreach name, $(BATCH_NAMES), \
-        yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/$(config_fn).yaml && \
+		[ $(name) == "earthquakes_jp" ] && \
+			yq -I4 -i '((.. | select(has("constrain_b"))).constrain_b |= "sigmoid")' configs/$(config_fn).yaml; \
+			yq -I4 -i '((.. | select(has("s_min"))).s_min |= 1.0e-3)' configs/$(config_fn).yaml \
+		|| \
+			yq -I4 -i '((.. | select(has("constrain_b"))).constrain_b |= false)' configs/$(config_fn).yaml; \
+			yq -I4 -i '((.. | select(has("s_min"))).s_min |= 1.0e-4)' configs/$(config_fn).yaml; \
+		yq -I4 -i '((.. | select(has("name"))).name |= "$(name)")' configs/$(config_fn).yaml && \
 		$(eval postf := $(subst _,-,$(name))) \
 		$(eval pref := $(subst _,-,$(config_fn))) \
 		$(foreach seed, $(SEEDS), \
@@ -162,6 +175,10 @@ toggle_aim:
 # S3 related                                                                    #
 #################################################################################
 
+## Check file existence on S3
+fd:
+	@s3cmd ls ${S3_PATH} --recursive | grep $(file)
+
 ## Delete all jobs
 delete_jobs:
 	@kubectl delete jobs -l user=zihao
@@ -171,7 +188,7 @@ upload_results:
 	@mkdir -p ${RESULT_DIR}
 	@python src/zip_results.py
 	@rm -rf ${RESULT_DIR}.aim
-	@s3cmd put --skip-existing ${RESULT_DIR}* ${DESTINATION_PATH}
+	@s3cmd put --skip-existing ${RESULT_DIR}* ${RESULT_PATH}
 
 ## Upload all model checkpoints to S3
 upload_models:
@@ -190,12 +207,12 @@ sync_results:
 			exit 1; \
 	fi
 	@rm -rf ${RESULT_DIR}.aim
-	@s3cmd sync --skip-existing --delete-removed ${RESULT_DIR} ${DESTINATION_PATH}
+	@s3cmd sync --skip-existing --delete-removed ${RESULT_DIR} ${RESULT_PATH}
 
 ## Download Results from S3
 download_results:
 	@mkdir -p ${RESULT_DIR}
-	@s3cmd get --skip-existing --recursive ${DESTINATION_PATH} ${RESULT_DIR}
+	@s3cmd get --skip-existing --recursive ${RESULT_PATH} ${RESULT_DIR}
 
 ## View Latest Downloaded Results
 view_results: download_results
@@ -221,7 +238,7 @@ clean_results:
 			exit 1; \
 	fi
 	@rm -rf ${RESULT_DIR}/.aim
-	@s3cmd rm ${DESTINATION_PATH} --recursive
+	@s3cmd rm ${RESULT_PATH} --recursive
 
 ## Set up python interpreter environment
 create_environment:

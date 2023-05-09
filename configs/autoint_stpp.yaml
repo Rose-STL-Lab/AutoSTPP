@@ -9,7 +9,7 @@ trainer:
         class_path: aim.pytorch_lightning.AimLogger
         init_args:
             experiment: 'autoint_stpp'
-            # repo: .blackhole
+            repo: .blackhole
     log_every_n_steps: 1
 model:
     class_path: models.lightning.autoint_stpp.AutoIntSTPointProcess
