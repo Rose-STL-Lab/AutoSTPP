@@ -29,5 +29,6 @@ if __name__ == '__main__':
     #     **cli.model.hparams
     # )
     # cli.trainer.test(cli.model, cli.datamodule)
+    cli.trainer.logger.log_hyperparams({'seed': cli.config['seed_everything']})
     cli.trainer.fit(cli.model, cli.datamodule)
     cli.trainer.test(cli.model, cli.datamodule, ckpt_path='best')

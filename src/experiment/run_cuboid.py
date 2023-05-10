@@ -24,5 +24,6 @@ def cli_main(args: ArgsType = None):
 if __name__ == '__main__':
     cli = cli_main()
     increase_u_limit()
+    cli.trainer.logger.log_hyperparams({'seed': cli.config['seed_everything']})
     cli.trainer.fit(cli.model, cli.datamodule)
-    cli.trainer.test(cli.model, cli.datamodule)
+    cli.trainer.test(cli.model, cli.datamodule, ckpt_path='best')
