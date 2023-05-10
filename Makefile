@@ -113,7 +113,7 @@ SEEDS ?= 1551 1552 1553
 batch_job: 
 	@sed -i 's,configs/[^[:space:]]*.yaml,configs/$(config_fn).yaml,g' kube/$(job_name).yaml	
 	$(foreach name, $(BATCH_NAMES), \
-		[ $(name) == "earthquakes_jp" ] && ( \
+		([ $(name) == "earthquakes_jp" ] && [ $(config_fn) == "deep_stpp" ]) && ( \
 			yq -I4 -i '((.. | select(has("constrain_b"))).constrain_b |= "clamp")' configs/$(config_fn).yaml; \
 			yq -I4 -i '((.. | select(has("s_min"))).s_min |= 1.0e-3)' configs/$(config_fn).yaml \
 		) || ( \
