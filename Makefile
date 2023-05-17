@@ -56,10 +56,10 @@ run_stpp:
 #################################################################################
 
 postfix ?=
-## Update kubectl config, infuse config to template, and delete dangling pods older than 30 minutes
+## Update kubectl config, infuse config to template, and delete dangling pods older than 24 hours
 update_kubeconfig:
 	@kubectl get configmaps -o json \
-		| jq '.items[] | select((.metadata.creationTimestamp | fromdateiso8601) < (now - 1800) and (.metadata.ownerReferences == null)) | .metadata.name' \
+		| jq '.items[] | select((.metadata.creationTimestamp | fromdateiso8601) < (now - 86400) and (.metadata.ownerReferences == null)) | .metadata.name' \
 		| grep $(CONFIG_PREFIX) | xargs -I {} kubectl delete configmap {} --ignore-not-found=true
 	@kubectl delete configmap $(CONFIG_PREFIX)$(postfix) --ignore-not-found=true
 	@kubectl create configmap $(CONFIG_PREFIX)$(postfix) --from-file=configs/
