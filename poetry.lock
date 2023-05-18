@@ -3369,17 +3369,6 @@ pygments = ">=2.6.0,<3.0.0"
 [package.extras]
 jupyter = ["ipywidgets (>=7.5.1,<8.0.0)"]
 
-[[package]]
-name = "rose-colormap"
-version = "1.0.0"
-description = ""
-category = "main"
-optional = false
-python-versions = "*"
-files = [
-    {file = "rose_colormap-1.0.0.tar.gz", hash = "sha256:9f66353c70e75427affff8998bc1fd4dbd0d7ccc95405a508579ce7099de78d9"},
-]
-
 [package.dependencies]
 matplotlib = "*"
 numpy = "*"

@@ -179,10 +179,6 @@ toggle_aim:
 fd:
 	@s3cmd ls ${S3_PATH} --recursive | grep $(file)
 
-## Delete all jobs
-delete_jobs:
-	@kubectl delete jobs -l user=zihao
-
 ## Upload Results to S3
 upload_results:
 	@mkdir -p ${RESULT_DIR}

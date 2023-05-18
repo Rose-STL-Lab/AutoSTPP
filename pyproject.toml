@@ -10,7 +10,7 @@ testpaths = [
 name = "autoint-stpp"
 version = "0.1.0"
 description = "Automatic Integration for Neural Spatio-Temporal Point Process models (AI-STPP) is a new paradigm for exact, efﬁcient, non-parametric inference of point process. It is capable of learning complicated underlying intensity functions, like a damped sine wave."
-authors = ["Zihao Zhou"]
+authors = ["zz"]
 license = "MIT"
 
 [tool.poetry.dependencies]
@@ -32,7 +32,6 @@ torchtyping = "~=0.1.4"
 typeguard = "~=2.13.3"
 pytest = "~=7.2.0"
 pandas = "^1.5.2"
-rose-colormap = "1.0.0"
 wandb = "^0.13.7"
 ffmpeg = "^1.4"
 ipykernel = "^6.21.3"
