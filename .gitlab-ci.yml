@@ -21,13 +21,14 @@ mirror_to_github:
     - echo "$GITHUB_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
     - git config --global user.email "ziz244@ucsd.edu"
     - git config --global user.name "Zihao Zhou"
+    - git config --global push.default current 
     - git clone ssh://git@gitlab-ssh.nrp-nautilus.io:30622/ZihaoZhou/autoint.git
     - ssh-keyscan github.com >> ~/.ssh/known_hosts
     - cd autoint
   script:
     - git remote add github git@github.com:Rose-STL-Lab/AI-STPP.git
-    - git push --all --force --set-upstream github main
-    - git push origin --delete $(git tag -l)
+    - git push --force --all github
+    - git push github --delete $(git tag -l)
     - git push github --tags
   only:
     - push
