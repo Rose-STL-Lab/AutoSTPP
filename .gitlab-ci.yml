@@ -26,10 +26,8 @@ mirror_to_github:
     - ssh-keyscan github.com >> ~/.ssh/known_hosts
     - cd autoint
   script:
-    - git remote add github git@github.com:Rose-STL-Lab/AI-STPP.git
-    - git push --force --all github
-    - git push github --delete $(git tag -l)
-    - git push github --tags
+    - git remote add github git@github.com:Rose-STL-Lab/AutoSTPP.git
+    - git push --force --mirror --all github
   only:
     - push
 
