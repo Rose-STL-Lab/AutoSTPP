@@ -27,7 +27,7 @@ mirror_to_github:
     - cd autoint
   script:
     - git remote add github git@github.com:Rose-STL-Lab/AutoSTPP.git
-    - git push --force --mirror --all github
+    - git push --force --mirror github
   only:
     - push
 
