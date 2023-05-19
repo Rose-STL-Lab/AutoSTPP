@@ -26,8 +26,9 @@ mirror_to_github:
     - cd autoint
   script:
     - git remote add github git@github.com:Rose-STL-Lab/AI-STPP.git
-    - git push --force --set-upstream github main
-    - git push --force github --tags
+    - git push --all --force --set-upstream github main
+    - git push origin --delete $(git tag -l)
+    - git push github --tags
   only:
     - push
 
