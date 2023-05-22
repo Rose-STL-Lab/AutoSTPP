@@ -1,5 +1,5 @@
 <p align="center" >
-  <a href="https://github.com/Rose-STL-Lab/AI-STPP"><img src="https://fremont.zzhou.info/images/2023/05/18/Auto-STPP.png" width="256" height="256" alt="AI-STPP"></a>
+  <a href="#"><img src="https://fremont.zzhou.info/images/2023/05/18/Auto-STPP.png" width="256" height="256" alt="AI-STPP"></a>
 </p>
 <h1 align="center">Auto-STPP</h1>
 <h4 align="center">✨Automatic Integration for Neural Spatiotemporal Point Process✨</h4>
