@@ -22,7 +22,7 @@ mirror_to_github:
     - git config --global user.email "ziz244@ucsd.edu"
     - git config --global user.name "Zihao Zhou"
     - git config --global push.default current 
-    - git clone ssh://git@gitlab-ssh.nrp-nautilus.io:30622/ZihaoZhou/autoint.git
+    - git clone --mirror ssh://git@gitlab-ssh.nrp-nautilus.io:30622/ZihaoZhou/autoint.git
     - ssh-keyscan github.com >> ~/.ssh/known_hosts
     - cd autoint
   script:
