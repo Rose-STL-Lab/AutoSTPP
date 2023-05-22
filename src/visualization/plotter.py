@@ -10,8 +10,7 @@ from tqdm.auto import tqdm
 from utils import relpath_under
 from scipy.stats import multivariate_normal
 from plotly.subplots import make_subplots
-from rose_colormap.plotly import rose_vivid
-from rose_colormap import rose_vivid as rose_vivid_matplotlib
+from matplotlib import cm
 
 
 def visualize_diff(outputs, targets, portion=1., fn=None):
@@ -95,7 +94,7 @@ def inverse_transform(x_range, y_range, t_range, scaler):
 
 
 def plot_lambst_static(lambs, x_range, y_range, t_range, fps, scaler=None, cmin=None, cmax=None,
-                       history=None, decay=0.3, base_size=300, cmap=rose_vivid_matplotlib, fn='result.mp4'):
+                       history=None, decay=0.3, base_size=300, cmap=cm.coolwarm, fn='result.mp4'):
     """
     The result could be saved as file with command `ani.save('file_name.mp4', writer='ffmpeg', fps=fps)`
                                         or command `ani.save('file_name.gif', writer='imagemagick', fps=fps)`
@@ -165,7 +164,7 @@ def plot_lambst_static(lambs, x_range, y_range, t_range, fps, scaler=None, cmin=
 
 
 def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_range, cmin=None, cmax=None,
-                            scaler=None, heatmap=False, colorscale=rose_vivid, show=True, cauto=False,
+                            scaler=None, heatmap=False, colorscale=None, show=True, cauto=False,
                             master_title='Spatio-temporal Conditional Intensity', subplot_titles=None):
     """
     :param lambs:   3D Array-like sampled intensities of shape (t_range, x_range, y_range)
@@ -182,8 +181,6 @@ def plot_lambst_interactive(lambs: Union[List, np.array], x_range, y_range, t_ra
     :param master_title: the one title above all
     :param subplot_titles: 1D Array of N str, title of each side-by-side comparison plot
     """
-    assert type(colorscale) == list and type(colorscale[0][1]) == str, "Unrecognized colorscale"
-
     if scaler is not None:  # Inverse transform the range to the actual scale
         x_range, y_range, t_range = inverse_transform(x_range, y_range, t_range, scaler)
 
@@ -477,14 +474,14 @@ if __name__ == '__main__':
         lambs2 = [lamb_st + np.random.normal(loc=0.0, scale=0.2, size=lamb_st.shape) for lamb_st in lambs]
 
         fig1 = plot_lambst_interactive([lambs, lambs1, lambs2], x_range, y_range, t_range, cmin=None, cmax=None,
-                                       scaler=None, heatmap=heatmap, colorscale=rose_vivid, show=False,
+                                       scaler=None, heatmap=heatmap, colorscale=None, show=False,
                                        subplot_titles=["Ground truth", "Predict by 1", "Predict by 2"])
         full_fn = f"{relpath_under('figs', create_dir=True)}/interactive.html"
         logger.info(f"Saving intensities to {full_fn}...")
         fig1.write_html(full_fn)
 
         fig2 = plot_lambst_interactive(lambs, x_range, y_range, t_range, cmin=None, cmax=None,
-                                       scaler=None, heatmap=heatmap, colorscale=rose_vivid, show=False)
+                                       scaler=None, heatmap=heatmap, colorscale=None, show=False)
         full_fn = f"{relpath_under('figs', create_dir=True)}/interactive_single.html"
         logger.info(f"Saving intensities to {full_fn}...")
         fig2.write_html(full_fn)
