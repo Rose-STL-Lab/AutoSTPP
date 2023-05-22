@@ -24,7 +24,7 @@ mirror_to_github:
     - git config --global push.default current 
     - git clone --mirror ssh://git@gitlab-ssh.nrp-nautilus.io:30622/ZihaoZhou/autoint.git
     - ssh-keyscan github.com >> ~/.ssh/known_hosts
-    - cd autoint
+    - cd autoint.git
   script:
     - git remote add github git@github.com:Rose-STL-Lab/AutoSTPP.git
     - git push --force --mirror github
