@@ -24,11 +24,13 @@ def cli_main(args: ArgsType = None):
 if __name__ == '__main__':
     cli = cli_main()
     increase_u_limit()
-    # cli.model = cli.model.load_from_checkpoint(
-    #     find_ckpt_path('b7443a', aim_path='.blackhole/.aim'),
-    #     **cli.model.hparams
-    # )
-    # cli.trainer.test(cli.model, cli.datamodule)
-    cli.trainer.logger.log_hyperparams({'seed': cli.config['seed_everything']})
-    cli.trainer.fit(cli.model, cli.datamodule)
-    cli.trainer.test(cli.model, cli.datamodule, ckpt_path='best')
+    if cli.config.ckpt_hash is not None:
+        cli.model = cli.model.load_from_checkpoint(
+            find_ckpt_path(cli.config.ckpt_hash, aim_path='.aim'),
+            **cli.model.hparams
+        )
+        cli.trainer.test(cli.model, cli.datamodule)
+    else:
+        cli.trainer.logger.log_hyperparams({'seed': cli.config['seed_everything']})
+        cli.trainer.fit(cli.model, cli.datamodule)
+        cli.trainer.test(cli.model, cli.datamodule, ckpt_path='best')

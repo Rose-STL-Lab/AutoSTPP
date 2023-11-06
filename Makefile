@@ -242,9 +242,8 @@ clean_results:
 
 ## Set up python interpreter environment
 create_environment:
-	conda create --name autoint --file conda-lock.yml
-	conda activate autoint
-	poetry install
+	conda-lock install --name ${PROJECT_NAME}
+	conda run -n ${PROJECT_NAME} poetry install
 
 ## Test python environment is setup correctly
 test_environment:

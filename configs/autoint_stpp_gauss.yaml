@@ -1,0 +1,41 @@
+seed_everything: 1553
+# ckpt_hash: 54708e
+trainer:
+    precision: 32
+    max_epochs: 150
+    # fast_dev_run: True
+    accelerator: 'cuda'
+    devices: [0]
+    logger:
+        class_path: aim.pytorch_lightning.AimLogger
+        init_args:
+            experiment: 'autoint_stpp_gauss'
+            # repo: .blackhole
+    log_every_n_steps: 1
+    callbacks:
+        - class_path: ModelCheckpoint
+          init_args:
+            monitor: val_nll
+model:
+    class_path: models.lightning.autoint_stpp_gauss.AutoIntSTPointProcessGauss
+    init_args:
+        n_prodnet: 10
+        hidden_size: 128
+        num_layers: 2
+        activation: tanh
+        learning_rate: 0.004
+        step_size: 20
+        gamma: 0.5
+        nsteps: [101, 101, 101]
+        round_time: true
+        trunc: true
+        vis_type: ['interactive', 'static']
+        start_idx: [0, 2]
+        name: sthp0
+data:
+    class_path: data.lightning.sliding_window.SlidingWindowDataModule
+    init_args:
+        batch_size: 128
+        num_workers: 8
+        name: sthp0
+        option: ready

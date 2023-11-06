@@ -92,7 +92,7 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
         lambs = self.F.forward(st_diff.view(-1, 3)).view([batch, seq_len])
         
         # Sum up all events' influence
-        lambs_sum = torch.sum(lambs, -1) + torch.exp(self.background)
+        lambs_sum = torch.sum(lambs, -1) + self.calc_background(s_y)
         
         ########## Calculate temporal intensity ############
         # [batch, seq_len]
@@ -134,6 +134,9 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
     def calc_lamb(self, st_x, st_x_cum, st_y, st_y_cum, scales, biases,
                   x_range, y_range, t_range, device):
         s_grids = torch.stack(torch.meshgrid(x_range, y_range, indexing='ij'), dim=-1).view(-1, 2).to(device)
+        backgrounds = self.calc_background(s_grids)
+        if type(backgrounds) is torch.Tensor:
+            backgrounds = backgrounds.reshape(len(x_range), len(y_range)).cpu().detach().numpy()
         
         ## Convert to history
         his_st_cum = torch.vstack((st_x_cum[0], st_y_cum.squeeze())).numpy()
@@ -178,7 +181,7 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
             lamb = np.concatenate(lamb, 0)
             lamb = lamb.reshape(len(s_grids), -1)
             lamb = lamb.sum(-1).reshape(len(x_range), len(y_range))
-            lamb += self.calc_background(st_diff[i:i + batch_size]).item()
+            lamb += backgrounds
             
             lambs.append(lamb / np.prod(scales))
             
@@ -187,5 +190,5 @@ class AutoIntSTPointProcess(BaseSTPointProcess):
     def calc_f(self, st_diff):
         return self.F.forward(st_diff)
 
-    def calc_background(self, st_diff):
-        return torch.exp(self.background)
+    def calc_background(self, s_grids):
+        return torch.exp(self.background).item()
