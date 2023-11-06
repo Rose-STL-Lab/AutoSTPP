@@ -14,6 +14,19 @@
 
 **Auto**matic Integration for Neural **S**patio-**T**emporal **P**oint **P**rocess models (Auto-STPP) is a new paradigm for exact, efﬁcient, non-parametric inference of spatiotemporal point process.
 
+## | Citation
+
+[[2310.06179] Automatic Integration for Spatiotemporal Neural Point Processes](https://arxiv.org/abs/2310.06179)
+
+```
+@article{zhou2023automatic,
+  title={Automatic Integration for Spatiotemporal Neural Point Processes},
+  author={Zhou, Zihao and Yu, Rose},
+  journal={arXiv preprint arXiv:2310.06179},
+  year={2023}
+}
+```
+
 ## | Installation
 
 Dependencies: `make`, `conda-lock`
