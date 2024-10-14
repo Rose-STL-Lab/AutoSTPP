@@ -1,11 +1,11 @@
 <p align="center" >
-  <a href="https://github.com/Rose-STL-Lab/AI-STPP"><img src="https://github.com/Rose-STL-Lab/AI-STPP/blob/master/Auto-STPP.png?raw=true" width="256" height="256" alt="AI-STPP"></a>
+  <a href="https://github.com/Rose-STL-Lab/AI-STPP"><img src="https://raw.githubusercontent.com/Rose-STL-Lab/AutoSTPP/refs/heads/main/Auto-STPP.png" width="256" height="256" alt="AI-STPP"></a>
 </p>
 <h1 align="center">Auto-STPP</h1>
 <h4 align="center">✨Automatic Integration for Neural Spatiotemporal Point Process✨</h4>
 
 <p align="center">
-    <a href="https://raw.githubusercontent.com/Rose-STL-Lab/AI-STPP/refs/heads/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="license"></a>
+    <a href="https://raw.githubusercontent.com/Rose-STL-Lab/AutoSTPP/refs/heads/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="license"></a>
     <img src="https://img.shields.io/badge/Python-3.10+-yellow" alt="python">
     <img src="https://img.shields.io/badge/Version-1.1.0-green" alt="version">
 </p>
